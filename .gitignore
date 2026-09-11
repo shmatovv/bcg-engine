@@ -1,0 +1,77 @@
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+
+/bin/
+/build/
+/dist/
+
+# Coverage / profiling
+*.out
+coverage.*
+*.coverprofile
+cpu.prof
+mem.prof
+*.prof
+
+# Local Go workspace
+go.work
+go.work.sum
+
+# JetBrains / GoLand / IntelliJ
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# VS Code
+.vscode/
+
+# Editor temporary files
+*.swp
+*.swo
+*~
+\#*\#
+.#*
+
+# Environment / local configuration
+.env
+.env.*
+!.env.example
+*.local
+*.local.*
+
+# Secrets
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Temporary files
+/tmp/
+/temp/
+.cache/
+*.tmp
+*.temp
+
+# Logs
+*.log
+/logs/
+
+# OS
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+Thumbs.db:encryptable
+Desktop.ini
+.directory
+.Trash-*
+
+# Local scratch
+/scratch/
+/artifacts/

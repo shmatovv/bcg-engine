@@ -1,0 +1,329 @@
+package provenance
+
+import (
+	"github.com/shmatovv/bcg-engine/internal/domain/address"
+	domainscenario "github.com/shmatovv/bcg-engine/internal/domain/scenario"
+	"github.com/shmatovv/bcg-engine/internal/domain/semantic"
+	"github.com/shmatovv/bcg-engine/internal/runtime"
+)
+
+// Node is one immutable node in an evaluation provenance tree.
+//
+// A node may additionally carry exactly one of:
+//   - a concrete PropertyAddress;
+//   - an operation name;
+//   - the selected ValueBinding;
+//   - the selected calculation Override;
+//   - the selected Scenario + ScenarioOverride.
+//
+// Children preserve the actual evaluation path. Branches that were not
+// evaluated because of short-circuit, IF selection or an effective override
+// are intentionally absent.
+type Node struct {
+	kind Kind
+
+	property    address.PropertyAddress
+	hasProperty bool
+
+	operation string
+
+	binding    semantic.ValueBinding
+	hasBinding bool
+
+	override    runtime.Override
+	hasOverride bool
+
+	scenario         domainscenario.Scenario
+	scenarioOverride domainscenario.Override
+	hasScenario      bool
+
+	children []Node
+}
+
+func NewProperty(
+	kind Kind,
+	property address.PropertyAddress,
+	children ...Node,
+) Node {
+	if kind != KindInputProperty &&
+		kind != KindDerivedProperty &&
+		kind != KindReference {
+		panic("provenance: invalid property node kind")
+	}
+
+	if !property.IsValid() {
+		panic("provenance: property address is invalid")
+	}
+
+	return Node{
+		kind:        kind,
+		property:    property,
+		hasProperty: true,
+		children:    cloneChildren(children),
+	}
+}
+
+func NewConstant() Node {
+	return Node{
+		kind: KindConstant,
+	}
+}
+
+func NewOperation(
+	operation string,
+	children ...Node,
+) Node {
+	if operation == "" {
+		panic("provenance: operation name must not be empty")
+	}
+
+	return Node{
+		kind:      KindOperation,
+		operation: operation,
+		children:  cloneChildren(children),
+	}
+}
+
+func NewCalculationOverride(
+	override runtime.Override,
+) Node {
+	if !override.IsValid() {
+		panic("provenance: calculation override is invalid")
+	}
+
+	return Node{
+		kind:        KindCalculationOverride,
+		override:    override,
+		hasOverride: true,
+	}
+}
+
+// NewScenarioOverride records the exact immutable Scenario and override that
+// replaced normal property resolution/evaluation.
+//
+// For a Derived property this node means that the base Expression was
+// deliberately bypassed for the current CalculationContext.
+func NewScenarioOverride(
+	scenario domainscenario.Scenario,
+	override domainscenario.Override,
+) Node {
+	if !scenario.IsValid() {
+		panic("provenance: scenario is invalid")
+	}
+
+	if !override.IsValid() {
+		panic("provenance: scenario override is invalid")
+	}
+
+	if scenario.ID().IsZero() ||
+		override.Target().Object().ID().IsZero() {
+		panic("provenance: invalid scenario override source")
+	}
+
+	return Node{
+		kind:             KindScenarioOverride,
+		scenario:         scenario,
+		scenarioOverride: override,
+		hasScenario:      true,
+	}
+}
+
+func NewBaseBinding(
+	kind Kind,
+	binding semantic.ValueBinding,
+) Node {
+	if kind != KindBaseObjectBinding &&
+		kind != KindBaseTypeBinding {
+		panic("provenance: invalid base binding node kind")
+	}
+
+	if !binding.IsValid() {
+		panic("provenance: base value binding is invalid")
+	}
+
+	return Node{
+		kind:       kind,
+		binding:    binding,
+		hasBinding: true,
+	}
+}
+
+func NewMissingValue() Node {
+	return Node{
+		kind: KindMissingValue,
+	}
+}
+
+func NewAmbiguousValue() Node {
+	return Node{
+		kind: KindAmbiguousValue,
+	}
+}
+
+func (n Node) Kind() Kind {
+	return n.kind
+}
+
+func (n Node) Property() (
+	address.PropertyAddress,
+	bool,
+) {
+	return n.property,
+		n.hasProperty
+}
+
+func (n Node) Operation() (
+	string,
+	bool,
+) {
+	if n.operation == "" {
+		return "", false
+	}
+
+	return n.operation, true
+}
+
+func (n Node) Binding() (
+	semantic.ValueBinding,
+	bool,
+) {
+	return n.binding,
+		n.hasBinding
+}
+
+func (n Node) Override() (
+	runtime.Override,
+	bool,
+) {
+	return n.override,
+		n.hasOverride
+}
+
+// ScenarioOverride returns the exact Scenario and override represented by a
+// KindScenarioOverride node.
+func (n Node) ScenarioOverride() (
+	domainscenario.Scenario,
+	domainscenario.Override,
+	bool,
+) {
+	return n.scenario,
+		n.scenarioOverride,
+		n.hasScenario
+}
+
+func (n Node) Children() []Node {
+	return cloneChildren(
+		n.children,
+	)
+}
+
+func (n Node) IsValid() bool {
+	if !n.kind.IsValid() {
+		return false
+	}
+
+	for _, child := range n.children {
+		if !child.IsValid() {
+			return false
+		}
+	}
+
+	switch n.kind {
+	case KindInputProperty,
+		KindDerivedProperty,
+		KindReference:
+
+		return n.hasProperty &&
+			n.property.IsValid() &&
+			n.operation == "" &&
+			!n.hasBinding &&
+			!n.hasOverride &&
+			!n.hasScenario
+
+	case KindConstant:
+		return !n.hasProperty &&
+			n.operation == "" &&
+			!n.hasBinding &&
+			!n.hasOverride &&
+			!n.hasScenario &&
+			len(n.children) == 0
+
+	case KindOperation:
+		return !n.hasProperty &&
+			n.operation != "" &&
+			!n.hasBinding &&
+			!n.hasOverride &&
+			!n.hasScenario
+
+	case KindCalculationOverride:
+		return !n.hasProperty &&
+			n.operation == "" &&
+			!n.hasBinding &&
+			n.hasOverride &&
+			n.override.IsValid() &&
+			!n.hasScenario &&
+			len(n.children) == 0
+
+	case KindScenarioOverride:
+		return !n.hasProperty &&
+			n.operation == "" &&
+			!n.hasBinding &&
+			!n.hasOverride &&
+			n.hasScenario &&
+			n.scenario.IsValid() &&
+			n.scenarioOverride.IsValid() &&
+			len(n.children) == 0
+
+	case KindBaseObjectBinding,
+		KindBaseTypeBinding:
+
+		return !n.hasProperty &&
+			n.operation == "" &&
+			n.hasBinding &&
+			n.binding.IsValid() &&
+			!n.hasOverride &&
+			!n.hasScenario &&
+			len(n.children) == 0
+
+	case KindMissingValue,
+		KindAmbiguousValue:
+
+		return !n.hasProperty &&
+			n.operation == "" &&
+			!n.hasBinding &&
+			!n.hasOverride &&
+			!n.hasScenario &&
+			len(n.children) == 0
+
+	default:
+		return false
+	}
+}
+
+func cloneChildren(
+	source []Node,
+) []Node {
+	if len(source) == 0 {
+		return nil
+	}
+
+	result := make(
+		[]Node,
+		len(source),
+	)
+
+	copy(
+		result,
+		source,
+	)
+
+	for _, child := range result {
+		if !child.IsValid() {
+			panic(
+				"provenance: child node is invalid",
+			)
+		}
+	}
+
+	return result
+}
