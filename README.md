@@ -286,8 +286,96 @@ them even when unrelated schema is changed. Expressions over 512 nodes may be
 assembled temporarily, but Validate and Commit reject them using the shared v1
 depth limit.
 
-Entity and relation instances, value bindings, series bindings, constraints,
-rules, and Scenario authoring are later steps.
+## Semantic data, bindings, and declarations
+
+`Entity` and `Relation` are immutable semantic declarations built with
+`NewEntity(EntitySpec{...})` and `NewRelation(RelationSpec{...})`. Add, replace,
+or remove them through a Draft. Relation applicability is an optional public
+`Expression`; endpoint and expression semantics remain validated by the model.
+
+Persistent values are separate immutable `ValueBinding` declarations. They
+target either a concrete property or a type-level default, and use a real
+compound `ValueBindingKey` (target, scopes, effective period) for replacement
+or removal—there is no invented binding UUID.
+
+```go
+quantityTarget, err := bcg.ObjectPropertyBindingTarget(quantityAddress)
+if err != nil { return err }
+quantityValue, err := bcg.DefinedBindingValue(bcg.DecimalValue(bcg.MustParseDecimal("100")))
+if err != nil { return err }
+quantity, err := bcg.NewValueBinding(bcg.ValueBindingSpec{
+	Target: quantityTarget, Value: quantityValue,
+})
+if err != nil { return err }
+if err := draft.AddValueBinding(quantity); err != nil { return err }
+```
+
+`NullBindingValue()` is explicit known absence, distinct from a missing
+binding and runtime Undefined. `ScopeSelector` values and optional
+`NewEffectivePeriod(from, to)` selectors use the same established resolution
+semantics as runtime calculations. A nil effective-period pointer means no
+time selector; a non-nil period may have open bounds.
+
+For a Series input, construct immutable source data, not a runtime
+`SeriesResult`:
+
+```go
+sample, err := bcg.DefinedSourceSample(bcg.DecimalValue(bcg.MustParseDecimal("5")))
+if err != nil { return err }
+point, err := bcg.NewSourcePoint(at, sample)
+if err != nil { return err }
+series, err := bcg.NewPointSourceSeries(bcg.DecimalType, nil, []bcg.SourcePoint{point})
+if err != nil { return err }
+seriesValue, err := bcg.SeriesBindingValue(series)
+```
+
+`NewIntervalSourceSeries` supports ordered, non-overlapping half-open
+intervals. Source samples may be Defined or `NullSourceSample()` but never
+Undefined. Constructors copy their input slices.
+
+Constraints and Rules remain declarative expressions evaluated by the existing
+engine; they introduce no actions or side effects:
+
+```go
+constraint, err := bcg.NewConstraint(bcg.ConstraintSpec{
+	ID: constraintID, Name: "revenue-nonnegative",
+	Assertion: revenueAtLeastZero, Severity: bcg.SeverityHard,
+})
+rule, err := bcg.NewRule(bcg.RuleSpec{
+	ID: ruleID, Name: "large-revenue", Condition: revenueOverThreshold,
+})
+if err != nil { return err }
+if err := draft.AddConstraint(constraint); err != nil { return err }
+if err := draft.AddRule(rule); err != nil { return err }
+```
+
+After committing, construct a Scenario against that exact Model version. A
+Scenario is immutable and carries value-only `ScenarioOverride`s; it may
+override an Input or Derived property, including a source Series, but never
+schema or semantic structure.
+
+```go
+override, err := bcg.NewScenarioOverride(bcg.ScenarioOverrideSpec{
+	Target: priceAddress, Value: priceAt300,
+})
+if err != nil { return err }
+scenario, err := bcg.NewScenario(model, bcg.ScenarioSpec{
+	ID: scenarioID, Name: "higher-price", Overrides: []bcg.ScenarioOverride{override},
+})
+if err != nil { return err }
+artifact, err := bcg.NewArtifact(model, scenario)
+```
+
+Use `Model.Edit()` to obtain independent copies of entities, relations,
+bindings, constraints, and rules. `ReplaceValueBinding` uses the original
+binding's `Key`; `Remove...` operations never cascade and the existing
+validation report identifies dangling references. `Scenario.WithOverrides`
+returns a new immutable Scenario and rejects a foreign base version.
+
+An aggregate over related entities is assembled with the same expression
+builders: use `SelfTraversal`, `BoundProperty(BoundEntity, childValueID)`, and
+`Aggregate` or `FilteredAggregate`. This retains the existing traversal,
+lexical-binding, Explain, and Impact semantics.
 
 For host-process safety, schema validation and `.bcg` decoding reject ASTs
 deeper than 512 nodes. Scalar and Series evaluation also bound active

@@ -16,9 +16,10 @@ const (
 
 // RuleInfo is read-only Rule metadata. Rules never carry effects or actions.
 type RuleInfo struct {
-	id       ID
-	name     string
-	metadata map[string]string
+	id         ID
+	name       string
+	metadata   map[string]string
+	definition Rule
 }
 
 // ID returns the Rule UUID.
@@ -35,6 +36,13 @@ func (r RuleInfo) Metadata() map[string]string {
 	}
 	return result
 }
+
+// Condition returns the immutable Boolean expression that determines the
+// Rule's Active, Inactive, or Undefined state.
+func (r RuleInfo) Condition() Expression { return r.definition.Condition() }
+
+// Definition returns the complete immutable Rule declaration.
+func (r RuleInfo) Definition() Rule { return r.definition }
 
 // RuleResult retains the condition result/provenance used for its state.
 type RuleResult struct {
@@ -85,7 +93,7 @@ func (r RuleReport) byState(state RuleState) []RuleResult {
 	return result
 }
 func ruleInfoFromInternal(value domainrule.Rule) RuleInfo {
-	return RuleInfo{id: idFromInternal(value.ID()), name: value.Name(), metadata: value.Metadata()}
+	return RuleInfo{id: idFromInternal(value.ID()), name: value.Name(), metadata: value.Metadata(), definition: ruleFromInternal(value)}
 }
 func ruleStateFromInternal(value ruleeval.State) RuleState {
 	switch value {

@@ -33,6 +33,7 @@ type ConstraintInfo struct {
 	severity   ConstraintSeverity
 	message    string
 	hasMessage bool
+	definition Constraint
 }
 
 // ID returns the Constraint UUID.
@@ -46,6 +47,10 @@ func (c ConstraintInfo) Severity() ConstraintSeverity { return c.severity }
 
 // Message returns the optional caller-provided diagnostic message.
 func (c ConstraintInfo) Message() (string, bool) { return c.message, c.hasMessage }
+
+// Definition returns the complete immutable Constraint declaration, including
+// its assertion and optional applicability expression.
+func (c ConstraintInfo) Definition() Constraint { return c.definition }
 
 // ConstraintResult retains only applicability/assertion results actually evaluated.
 type ConstraintResult struct {
@@ -82,7 +87,7 @@ func (r ConstraintReport) Len() int { return len(r.results) }
 
 func constraintInfoFromInternal(value constraint.Constraint) ConstraintInfo {
 	message, hasMessage := value.Message()
-	return ConstraintInfo{id: idFromInternal(value.ID()), name: value.Name(), severity: severityFromInternal(value.Severity()), message: message, hasMessage: hasMessage}
+	return ConstraintInfo{id: idFromInternal(value.ID()), name: value.Name(), severity: severityFromInternal(value.Severity()), message: message, hasMessage: hasMessage, definition: constraintFromInternal(value)}
 }
 func severityFromInternal(value constraint.Severity) ConstraintSeverity {
 	switch value {

@@ -175,8 +175,8 @@ func (o CommitOptions) internal() (internalmodel.CommitOptions, error) {
 // concurrent mutation. A Draft may be invalid while an author is editing it;
 // only Commit produces an immutable, valid Model.
 //
-// Draft exposes typed schema operations while keeping all internal domain
-// objects private. Expression construction is added separately in Step 4.
+// Draft exposes typed schema, semantic-data, persistent-binding, Constraint,
+// and Rule operations while keeping all internal domain objects private.
 type Draft struct {
 	modelID identity.UUID
 	name    string

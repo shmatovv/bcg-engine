@@ -333,6 +333,7 @@ type EntityInfo struct {
 	id, typeID ID
 	name       string
 	hasName    bool
+	entity     Entity
 }
 
 // ID returns the Entity UUID.
@@ -344,8 +345,14 @@ func (e EntityInfo) TypeID() ID { return e.typeID }
 // Name returns the optional display name.
 func (e EntityInfo) Name() (string, bool) { return e.name, e.hasName }
 
+// Declaration returns the complete immutable Entity declaration.
+func (e EntityInfo) Declaration() Entity { return e.entity }
+
 // RelationInfo is immutable read-only semantic graph information.
-type RelationInfo struct{ id, typeID, from, to ID }
+type RelationInfo struct {
+	id, typeID, from, to ID
+	relation             Relation
+}
 
 // ID returns the Relation UUID.
 func (r RelationInfo) ID() ID { return r.id }
@@ -358,6 +365,12 @@ func (r RelationInfo) From() ID { return r.from }
 
 // To returns the target Entity UUID.
 func (r RelationInfo) To() ID { return r.to }
+
+// Applicability returns the optional Relation applicability expression.
+func (r RelationInfo) Applicability() (Expression, bool) { return r.relation.Applicability() }
+
+// Declaration returns the complete immutable Relation declaration.
+func (r RelationInfo) Declaration() Relation { return r.relation }
 
 // NamedInfo identifies a named schema object.
 type NamedInfo struct {
@@ -426,7 +439,7 @@ func (m Model) Entities() []EntityInfo {
 	result := make([]EntityInfo, len(items))
 	for index, item := range items {
 		name, hasName := item.Name()
-		result[index] = EntityInfo{id: idFromInternal(item.ID()), typeID: idFromInternal(item.TypeID()), name: name, hasName: hasName}
+		result[index] = EntityInfo{id: idFromInternal(item.ID()), typeID: idFromInternal(item.TypeID()), name: name, hasName: hasName, entity: entityFromInternal(item)}
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].id.String() < result[j].id.String() })
 	return result
@@ -440,9 +453,25 @@ func (m Model) Relations() []RelationInfo {
 	items := m.version.Relations()
 	result := make([]RelationInfo, len(items))
 	for index, item := range items {
-		result[index] = RelationInfo{id: idFromInternal(item.ID()), typeID: idFromInternal(item.TypeID()), from: idFromInternal(item.From()), to: idFromInternal(item.To())}
+		result[index] = RelationInfo{id: idFromInternal(item.ID()), typeID: idFromInternal(item.TypeID()), from: idFromInternal(item.From()), to: idFromInternal(item.To()), relation: relationFromInternal(item)}
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].id.String() < result[j].id.String() })
+	return result
+}
+
+// ValueBindings returns deterministic immutable base value declarations.
+// Binding values have no standalone UUID; use each ValueBinding's compound
+// Key when editing a Draft.
+func (m Model) ValueBindings() []ValueBinding {
+	if !m.IsValid() {
+		return nil
+	}
+	items := m.version.ValueBindings()
+	result := make([]ValueBinding, len(items))
+	for index, item := range items {
+		result[index] = valueBindingFromInternal(item)
+	}
+	sort.SliceStable(result, func(i, j int) bool { return valueBindingSortKey(result[i]) < valueBindingSortKey(result[j]) })
 	return result
 }
 
@@ -523,6 +552,30 @@ func (m Model) Rules() []RuleInfo {
 	return result
 }
 
+// Constraint returns the complete immutable Constraint declaration by ID.
+func (m Model) Constraint(id ID) (Constraint, bool) {
+	if !m.IsValid() || id.IsZero() {
+		return Constraint{}, false
+	}
+	item, ok := m.version.Constraint(id.value)
+	if !ok {
+		return Constraint{}, false
+	}
+	return constraintFromInternal(item), true
+}
+
+// Rule returns the complete immutable Rule declaration by ID.
+func (m Model) Rule(id ID) (Rule, bool) {
+	if !m.IsValid() || id.IsZero() {
+		return Rule{}, false
+	}
+	item, ok := m.version.Rule(id.value)
+	if !ok {
+		return Rule{}, false
+	}
+	return ruleFromInternal(item), true
+}
+
 // Entity looks up one Entity descriptor by UUID.
 func (m Model) Entity(id ID) (EntityInfo, bool) {
 	if !m.IsValid() || id.IsZero() {
@@ -533,7 +586,7 @@ func (m Model) Entity(id ID) (EntityInfo, bool) {
 		return EntityInfo{}, false
 	}
 	name, hasName := item.Name()
-	return EntityInfo{id: idFromInternal(item.ID()), typeID: idFromInternal(item.TypeID()), name: name, hasName: hasName}, true
+	return EntityInfo{id: idFromInternal(item.ID()), typeID: idFromInternal(item.TypeID()), name: name, hasName: hasName, entity: entityFromInternal(item)}, true
 }
 
 // Relation looks up one Relation descriptor by UUID.
@@ -545,7 +598,7 @@ func (m Model) Relation(id ID) (RelationInfo, bool) {
 	if !ok {
 		return RelationInfo{}, false
 	}
-	return RelationInfo{id: idFromInternal(item.ID()), typeID: idFromInternal(item.TypeID()), from: idFromInternal(item.From()), to: idFromInternal(item.To())}, true
+	return RelationInfo{id: idFromInternal(item.ID()), typeID: idFromInternal(item.TypeID()), from: idFromInternal(item.From()), to: idFromInternal(item.To()), relation: relationFromInternal(item)}, true
 }
 
 // EntityType looks up one complete immutable EntityType declaration by UUID.
