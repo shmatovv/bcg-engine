@@ -131,6 +131,11 @@ type UnitFactor struct {
 	Exponent int
 }
 
+// IsValid reports whether f is a structurally valid symbolic unit factor.
+func (f UnitFactor) IsValid() bool {
+	return UnitID(f.ID).IsValid() && f.Exponent != 0
+}
+
 // Factors returns a defensive canonical factor description.
 func (u Unit) Factors() []UnitFactor {
 	factors := u.value.Factors()
@@ -140,6 +145,26 @@ func (u Unit) Factors() []UnitFactor {
 	}
 	return result
 }
+
+// Dimension returns u's canonical dimensional meaning.
+func (u Unit) Dimension() Dimension { return Dimension{value: u.value.Dimension()} }
+
+// Scale returns u's exact conversion scale within its conversion signature.
+func (u Unit) Scale() Rational { return Rational{value: u.value.Scale()} }
+
+// ConversionFactors returns an owned canonical conversion-signature list.
+func (u Unit) ConversionFactors() []ConversionFactor {
+	factors := u.value.ConversionFactors()
+	result := make([]ConversionFactor, len(factors))
+	for index, factor := range factors {
+		result[index] = ConversionFactor{ID: ConversionSpaceID(factor.ID), Exponent: factor.Exponent}
+	}
+	return result
+}
+
+// CanConvertTo reports whether u and other have equal Dimensions and equal
+// exact conversion signatures.
+func (u Unit) CanConvertTo(other Unit) bool { return u.value.CanConvertTo(other.value) }
 
 // Value is an immutable defined typed value. Null and Undefined are result
 // states, not Values.
@@ -231,6 +256,11 @@ func (v Value) Kind() ValueKind {
 		return ""
 	}
 }
+
+// Type returns v's scalar ValueType, or the invalid zero ValueType when v is
+// invalid. ValueType is the schema-facing type description; Kind remains the
+// backward-compatible runtime label.
+func (v Value) Type() ValueType { return valueTypeFromInternal(v.value.Type()) }
 
 // Unit returns v's optional unit.
 func (v Value) Unit() (Unit, bool) {

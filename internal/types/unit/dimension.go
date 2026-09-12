@@ -1,6 +1,7 @@
 package unit
 
 import (
+	"fmt"
 	"math"
 	"sort"
 )
@@ -127,7 +128,22 @@ func NewDimension(factors []DimensionFactor) Dimension {
 	for index, factor := range factors {
 		internal[index] = Factor{id: factor.ID, exponent: factor.Exponent}
 	}
-	return newDimension(internal)
+	result, err := newDimensionChecked(internal)
+	if err != nil {
+		panic(err)
+	}
+	return result
+}
+
+// NewDimensionChecked constructs a canonical Dimension without panicking for
+// invalid portable input. It is the error-returning counterpart to
+// NewDimension for public and other recoverable data boundaries.
+func NewDimensionChecked(factors []DimensionFactor) (Dimension, error) {
+	internal := make([]Factor, len(factors))
+	for index, factor := range factors {
+		internal[index] = Factor{id: factor.ID, exponent: factor.Exponent}
+	}
+	return newDimensionChecked(internal)
 }
 
 // Base returns the base dimension identified by id.
@@ -251,21 +267,30 @@ func (d Dimension) Div(other Dimension) Dimension {
 //
 // newDimension panics if an ID is invalid or exponent arithmetic overflows.
 func newDimension(factors []Factor) Dimension {
+	result, err := newDimensionChecked(factors)
+	if err != nil {
+		panic(err)
+	}
+	return result
+}
+
+func newDimensionChecked(factors []Factor) (Dimension, error) {
 	if len(factors) == 0 {
-		return Dimensionless()
+		return Dimensionless(), nil
 	}
 
 	powers := make(map[ID]int, len(factors))
 
 	for _, factor := range factors {
 		if !factor.id.IsValid() {
-			panic("unit: invalid dimension id")
+			return Dimension{}, fmt.Errorf("unit: invalid dimension id %q", factor.id)
 		}
 
-		powers[factor.id] = addExponent(
-			powers[factor.id],
-			factor.exponent,
-		)
+		exponent, err := addExponentChecked(powers[factor.id], factor.exponent)
+		if err != nil {
+			return Dimension{}, err
+		}
+		powers[factor.id] = exponent
 	}
 
 	result := make([]Factor, 0, len(powers))
@@ -287,7 +312,7 @@ func newDimension(factors []Factor) Dimension {
 
 	return Dimension{
 		factors: result,
-	}
+	}, nil
 }
 
 // addExponent returns a+b.
@@ -295,15 +320,23 @@ func newDimension(factors []Factor) Dimension {
 // It panics rather than allowing integer overflow to silently change the
 // mathematical meaning of a dimension.
 func addExponent(a, b int) int {
+	result, err := addExponentChecked(a, b)
+	if err != nil {
+		panic(err)
+	}
+	return result
+}
+
+func addExponentChecked(a, b int) (int, error) {
 	if b > 0 && a > math.MaxInt-b {
-		panic(ErrExponentOverflow)
+		return 0, ErrExponentOverflow
 	}
 
 	if b < 0 && a < math.MinInt-b {
-		panic(ErrExponentOverflow)
+		return 0, ErrExponentOverflow
 	}
 
-	return a + b
+	return a + b, nil
 }
 
 // negateExponent returns -value.

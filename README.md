@@ -105,6 +105,26 @@ entity, relation, value-binding, constraint, rule, and Scenario authoring are
 intentionally introduced in later v1.1 steps; callers never need wire JSON or
 an `internal/...` import for the lifecycle itself.
 
+## Authoring primitives
+
+`ValueType` is schema metadata (`bcg.DecimalType`, `bcg.BoolType`, and the
+other scalar v1 types); `Value` is an actual defined value (`DecimalValue`,
+`Bool`, `Integer`, and so on). Decimal, integer, duration, and unit-scale
+construction are exact and never use `float64`.
+
+Use `NewBaseDimension` or `NewDimension` to describe generic dimensional
+meaning, then `NewUnit` for one concrete symbol and exact conversion scale.
+`NewComposedUnit` accepts the full canonical `.bcg v1` unit representation
+when a compound unit is required. Dimensions and unit IDs are generic symbols;
+BCG provides no built-in catalog of currencies, weights, lengths, or other
+business units.
+
+`TemporalScalar` and `TemporalSeries` describe property temporal mode.
+`PointSeries` and `IntervalSeries` are the supported source-series axes. They
+are primitives only in this release; source-series and value-binding authoring
+arrive in later steps. `PrecisionPolicy` uses an explicit scale and one of
+`RoundTruncate`, `RoundFloor`, `RoundCeil`, `RoundHalfUp`, or `RoundHalfEven`.
+
 For host-process safety, schema validation and `.bcg` decoding reject ASTs
 deeper than 512 nodes. Scalar and Series evaluation also bound active
 expression/property nesting to 512 frames; a deeper valid dependency chain

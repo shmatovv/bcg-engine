@@ -153,23 +153,39 @@ func NewUnit(
 	conversionSpace ConversionSpaceID,
 	scale rational.Rational,
 ) Unit {
+	result, err := NewUnitChecked(id, dimension, conversionSpace, scale)
+	if err != nil {
+		panic(err)
+	}
+	return result
+}
+
+// NewUnitChecked constructs a concrete symbolic Unit without panicking for
+// invalid input. It is the error-returning counterpart to NewUnit for public
+// and other recoverable data boundaries.
+func NewUnitChecked(
+	id UnitID,
+	dimension Dimension,
+	conversionSpace ConversionSpaceID,
+	scale rational.Rational,
+) (Unit, error) {
 	if !id.IsValid() {
-		panic(fmt.Sprintf("unit: invalid unit id %q", id))
+		return Unit{}, fmt.Errorf("unit: invalid unit id %q", id)
 	}
 
 	if !dimension.IsValid() {
-		panic("unit: invalid dimension")
+		return Unit{}, fmt.Errorf("unit: invalid dimension")
 	}
 
 	if !conversionSpace.IsValid() {
-		panic(fmt.Sprintf(
+		return Unit{}, fmt.Errorf(
 			"unit: invalid conversion space %q",
 			conversionSpace,
-		))
+		)
 	}
 
 	if scale.Sign() <= 0 {
-		panic("unit: scale must be positive")
+		return Unit{}, fmt.Errorf("unit: scale must be positive")
 	}
 
 	return Unit{
@@ -188,7 +204,7 @@ func NewUnit(
 		},
 		scale: scale,
 		valid: true,
-	}
+	}, nil
 }
 
 // NewComposedUnit constructs a canonical Unit from its complete portable
@@ -205,6 +221,22 @@ func NewComposedUnit(
 	conversionFactors []ConversionFactorSpec,
 	scale rational.Rational,
 ) Unit {
+	result, err := NewComposedUnitChecked(dimension, factors, conversionFactors, scale)
+	if err != nil {
+		panic(err)
+	}
+	return result
+}
+
+// NewComposedUnitChecked constructs a canonical portable Unit without
+// panicking for invalid input. Unlike unit algebra, this boundary accepts only
+// an already canonical factor and conversion-factor representation.
+func NewComposedUnitChecked(
+	dimension Dimension,
+	factors []SymbolicFactor,
+	conversionFactors []ConversionFactorSpec,
+	scale rational.Rational,
+) (Unit, error) {
 	internalFactors := make([]UnitFactor, len(factors))
 	for index, factor := range factors {
 		internalFactors[index] = UnitFactor{id: factor.ID, exponent: factor.Exponent}
@@ -221,9 +253,9 @@ func NewComposedUnit(
 		valid:             true,
 	}
 	if !result.IsValid() {
-		panic("unit: invalid composed unit")
+		return Unit{}, fmt.Errorf("unit: invalid composed unit")
 	}
-	return result
+	return result, nil
 }
 
 // IsValid reports whether id is a valid unit identifier.

@@ -13,6 +13,9 @@ const (
 	IntervalSeries SeriesAxis = "Interval"
 )
 
+// IsValid reports whether a identifies one supported source-series axis.
+func (a SeriesAxis) IsValid() bool { return a == PointSeries || a == IntervalSeries }
+
 // SeriesPoint is one evaluated point sample.
 type SeriesPoint struct {
 	at     DateTime

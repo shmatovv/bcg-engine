@@ -15,4 +15,11 @@
 // The package intentionally does not expose internal domain objects,
 // dependency graphs, or evaluator caches. Typed schema and expression
 // authoring operations are added separately from the lifecycle API.
+//
+// ValueType describes scalar schema metadata, while Value holds an actual
+// defined value. Dimension and Unit provide exact, domain-neutral unit
+// primitives; BCG has no built-in business-unit catalog. Unit conversion
+// scales use Rational rather than float64. TemporalScalar and TemporalSeries
+// describe property temporal mode, while PointSeries and IntervalSeries
+// describe source-series axes.
 package bcg
