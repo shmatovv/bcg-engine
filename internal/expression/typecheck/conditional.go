@@ -78,9 +78,12 @@ func (e ConditionalError) Error() string {
 
 // InferIf determines the static result type of an IF expression.
 //
-// IF condition is a scalar Bool.
+// IF condition is a Bool. A Scalar condition chooses one whole branch. A
+// Series condition selects between two Series branches sample-by-sample.
 //
-// Branches must have compatible ValueType, Unit and TemporalMode.
+// Branches must have compatible ValueType, Unit and TemporalMode. A Series
+// condition with Scalar branches is rejected because it would require an
+// implicit Scalar-to-Series broadcast.
 //
 // Result nullability is determined by the possible branch values. Nullable
 // condition is not automatically converted into a nullable result type;
@@ -96,9 +99,10 @@ func InferIf(
 		}
 	}
 
-	if condition.TemporalMode() != typing.TemporalScalar {
+	if condition.TemporalMode() == typing.TemporalSeries &&
+		thenType.TemporalMode() != typing.TemporalSeries {
 		return typing.Type{}, ConditionalError{
-			kind: ConditionalErrorNonScalarCondition,
+			kind: ConditionalErrorIncompatibleTemporalModes,
 		}
 	}
 

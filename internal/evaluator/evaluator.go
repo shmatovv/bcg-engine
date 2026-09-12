@@ -562,89 +562,7 @@ func provenanceFromOutcome(
 ) (provenance.Node, error) {
 	if source, ok :=
 		outcome.Source(); ok {
-
-		switch source.Kind() {
-		case resolvervalue.SourceCalculationOverride:
-			override, exists :=
-				source.Override()
-
-			if !exists {
-				return provenance.Node{},
-					newError(
-						ErrorInvariantViolation,
-						"resolver calculation override source has no override",
-						nil,
-					)
-			}
-
-			return provenance.NewCalculationOverride(
-				override,
-			), nil
-
-		case resolvervalue.SourceScenarioOverride:
-			scenario,
-				override,
-				exists :=
-				source.ScenarioOverride()
-
-			if !exists {
-				return provenance.Node{},
-					newError(
-						ErrorInvariantViolation,
-						"resolver Scenario override source has no Scenario override",
-						nil,
-					)
-			}
-
-			return provenance.NewScenarioOverride(
-				scenario,
-				override,
-			), nil
-
-		case resolvervalue.SourceBaseObjectBinding:
-			binding, exists :=
-				source.Binding()
-
-			if !exists {
-				return provenance.Node{},
-					newError(
-						ErrorInvariantViolation,
-						"resolver object binding source has no binding",
-						nil,
-					)
-			}
-
-			return provenance.NewBaseBinding(
-				provenance.KindBaseObjectBinding,
-				binding,
-			), nil
-
-		case resolvervalue.SourceBaseTypeBinding:
-			binding, exists :=
-				source.Binding()
-
-			if !exists {
-				return provenance.Node{},
-					newError(
-						ErrorInvariantViolation,
-						"resolver type binding source has no binding",
-						nil,
-					)
-			}
-
-			return provenance.NewBaseBinding(
-				provenance.KindBaseTypeBinding,
-				binding,
-			), nil
-
-		default:
-			return provenance.Node{},
-				newError(
-					ErrorInvariantViolation,
-					"resolver returned an unknown source kind",
-					nil,
-				)
-		}
+		return provenanceFromSource(source)
 	}
 
 	resolved :=
@@ -676,6 +594,95 @@ func provenanceFromOutcome(
 			newError(
 				ErrorInvariantViolation,
 				"resolver returned unsupported source-less Undefined value",
+				nil,
+			)
+	}
+}
+
+func provenanceFromSource(source resolvervalue.Source) (provenance.Node, error) {
+	if !source.IsValid() {
+		return provenance.Node{}, newError(ErrorInvariantViolation, "resolver returned an invalid source", nil)
+	}
+
+	switch source.Kind() {
+	case resolvervalue.SourceCalculationOverride:
+		override, exists :=
+			source.Override()
+
+		if !exists {
+			return provenance.Node{},
+				newError(
+					ErrorInvariantViolation,
+					"resolver calculation override source has no override",
+					nil,
+				)
+		}
+
+		return provenance.NewCalculationOverride(
+			override,
+		), nil
+
+	case resolvervalue.SourceScenarioOverride:
+		scenario,
+			override,
+			exists :=
+			source.ScenarioOverride()
+
+		if !exists {
+			return provenance.Node{},
+				newError(
+					ErrorInvariantViolation,
+					"resolver Scenario override source has no Scenario override",
+					nil,
+				)
+		}
+
+		return provenance.NewScenarioOverride(
+			scenario,
+			override,
+		), nil
+
+	case resolvervalue.SourceBaseObjectBinding:
+		binding, exists :=
+			source.Binding()
+
+		if !exists {
+			return provenance.Node{},
+				newError(
+					ErrorInvariantViolation,
+					"resolver object binding source has no binding",
+					nil,
+				)
+		}
+
+		return provenance.NewBaseBinding(
+			provenance.KindBaseObjectBinding,
+			binding,
+		), nil
+
+	case resolvervalue.SourceBaseTypeBinding:
+		binding, exists :=
+			source.Binding()
+
+		if !exists {
+			return provenance.Node{},
+				newError(
+					ErrorInvariantViolation,
+					"resolver type binding source has no binding",
+					nil,
+				)
+		}
+
+		return provenance.NewBaseBinding(
+			provenance.KindBaseTypeBinding,
+			binding,
+		), nil
+
+	default:
+		return provenance.Node{},
+			newError(
+				ErrorInvariantViolation,
+				"resolver returned an unknown source kind",
 				nil,
 			)
 	}

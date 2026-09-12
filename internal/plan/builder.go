@@ -257,6 +257,24 @@ func (b *builder) visit(
 func (b *builder) resolveNode(
 	target address.PropertyAddress,
 ) (Node, bool, error) {
+	definition, ok :=
+		b.version.
+			PropertyDefinition(
+				target.DefinitionID(),
+			)
+
+	if !ok || !definition.IsValid() {
+		return Node{}, false, newError(
+			ErrorDefinitionNotFound,
+			"plan vertex PropertyDefinition could not be resolved from committed ModelVersion",
+			nil,
+		)
+	}
+
+	if definition.TemporalMode() == schema.TemporalSeries {
+		return b.resolveSeriesNode(target, definition)
+	}
+
 	calculationOutcome,
 		calculationFound,
 		err :=
@@ -313,24 +331,6 @@ func (b *builder) resolveNode(
 		), true, nil
 	}
 
-	definition, ok :=
-		b.version.
-			PropertyDefinition(
-				target.DefinitionID(),
-			)
-
-	if !ok ||
-		!definition.IsValid() {
-
-		return Node{},
-			false,
-			newError(
-				ErrorDefinitionNotFound,
-				"plan vertex PropertyDefinition could not be resolved from committed ModelVersion",
-				nil,
-			)
-	}
-
 	switch definition.
 		Computation().
 		Kind() {
@@ -355,6 +355,42 @@ func (b *builder) resolveNode(
 				"plan vertex has invalid computation kind",
 				nil,
 			)
+	}
+}
+
+func (b *builder) resolveSeriesNode(
+	target address.PropertyAddress,
+	definition schema.PropertyDefinition,
+) (Node, bool, error) {
+	calculation, calculationFound, err := resolvervalue.ResolveSeriesCalculationOverride(b.version, target, b.context)
+	if err != nil {
+		return Node{}, false, newError(ErrorOverrideResolution, "failed to resolve Series calculation override while building plan", err)
+	}
+	if calculationFound {
+		if !calculation.IsValid() {
+			return Node{}, false, newError(ErrorInvariantViolation, "Series calculation override outcome is invalid", nil)
+		}
+		return newSeriesOverrideNode(target, NodeCalculationOverride), true, nil
+	}
+
+	scenario, scenarioFound, err := resolvervalue.ResolveSeriesScenarioOverride(b.version, target, b.context)
+	if err != nil {
+		return Node{}, false, newError(ErrorOverrideResolution, "failed to resolve Series Scenario override while building plan", err)
+	}
+	if scenarioFound {
+		if !scenario.IsValid() {
+			return Node{}, false, newError(ErrorInvariantViolation, "Series Scenario override outcome is invalid", nil)
+		}
+		return newSeriesOverrideNode(target, NodeScenarioOverride), true, nil
+	}
+
+	switch definition.Computation().Kind() {
+	case schema.ComputationInput:
+		return newBaseNode(target, NodeInput), false, nil
+	case schema.ComputationDerived:
+		return newBaseNode(target, NodeDerivedExpression), false, nil
+	default:
+		return Node{}, false, newError(ErrorInvalidComputation, "Series plan vertex has invalid computation kind", nil)
 	}
 }
 

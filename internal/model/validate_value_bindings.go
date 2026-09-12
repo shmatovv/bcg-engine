@@ -1,11 +1,15 @@
 package model
 
 import (
+	"errors"
+
 	"github.com/shmatovv/bcg-engine/internal/domain/identity"
 	"github.com/shmatovv/bcg-engine/internal/domain/schema"
 	"github.com/shmatovv/bcg-engine/internal/domain/scope"
 	"github.com/shmatovv/bcg-engine/internal/domain/semantic"
 	domaintime "github.com/shmatovv/bcg-engine/internal/domain/time"
+	"github.com/shmatovv/bcg-engine/internal/types/series"
+	"github.com/shmatovv/bcg-engine/internal/types/unit"
 	"github.com/shmatovv/bcg-engine/internal/types/value"
 )
 
@@ -24,10 +28,8 @@ import (
 //     their scope selectors can match the same context and effective periods
 //     overlap.
 //
-// Defined base values for TemporalSeries are rejected until the engine has a
-// first-class Series value representation. Null remains legal for a Series
-// property when its contract is nullable because Null denotes absence of the
-// property value rather than one scalar sample.
+// Scalar and Series values are deliberately distinct. A Series stores Null at
+// individual samples; a whole-Series Null is not defined by Series Core v1.
 func (d *Draft) validateValueBindings(
 	report *ValidationReport,
 	indexes validationIndexes,
@@ -317,13 +319,13 @@ func validateBindingValue(
 
 		valid := true
 
-		if definition.TemporalMode() == schema.TemporalSeries {
+		if definition.TemporalMode() != schema.TemporalScalar {
 			report.append(
 				newRelatedValidationIssue(
-					ValidationIssueUnsupportedSeriesBaseValue,
+					ValidationIssueTemporalValueMismatch,
 					resolved.subjectID,
 					definition.ID(),
-					"defined base value cannot target a Series property until Series values are represented explicitly",
+					"scalar base value cannot target a Series property",
 				),
 			)
 			valid = false
@@ -358,7 +360,57 @@ func validateBindingValue(
 
 		return valid
 
+	case semantic.BindingValueSeries:
+		stored, ok := bindingValue.Series()
+		if !ok || !stored.IsValid() {
+			return false
+		}
+
+		if definition.TemporalMode() != schema.TemporalSeries {
+			report.append(
+				newRelatedValidationIssue(
+					ValidationIssueTemporalValueMismatch,
+					resolved.subjectID,
+					definition.ID(),
+					"Series base value cannot target a Scalar property",
+				),
+			)
+			return false
+		}
+
+		if err := stored.ValidateAgainst(
+			definition.ValueType(),
+			unitFromDefinition(definition),
+			definitionHasUnit(definition),
+			definitionAllowsNull(definition, indexes),
+		); err != nil {
+			switch {
+			case errors.Is(err, series.ErrElementTypeMismatch):
+				report.append(newRelatedValidationIssue(ValidationIssueValueTypeMismatch, resolved.subjectID, definition.ID(), "Series element type does not match property definition"))
+			case errors.Is(err, series.ErrUnitMismatch):
+				report.append(newRelatedValidationIssue(ValidationIssueValueUnitMismatch, resolved.subjectID, definition.ID(), "Series unit does not exactly match property definition unit"))
+			case errors.Is(err, series.ErrNullNotAllowed):
+				report.append(newRelatedValidationIssue(ValidationIssueNullNotAllowed, resolved.subjectID, definition.ID(), "Null Series sample is not allowed by the property contract"))
+			default:
+				report.append(newRelatedValidationIssue(ValidationIssueInvalidValueBinding, resolved.subjectID, definition.ID(), "Series base value is invalid"))
+			}
+			return false
+		}
+
+		return true
+
 	case semantic.BindingValueNull:
+		if definition.TemporalMode() == schema.TemporalSeries {
+			report.append(
+				newRelatedValidationIssue(
+					ValidationIssueTemporalValueMismatch,
+					resolved.subjectID,
+					definition.ID(),
+					"whole-Series Null base values are not supported",
+				),
+			)
+			return false
+		}
 		contractID, hasContract := definition.ContractID()
 		if !hasContract {
 			report.append(
@@ -395,6 +447,25 @@ func validateBindingValue(
 	default:
 		return false
 	}
+}
+
+func unitFromDefinition(definition schema.PropertyDefinition) unit.Unit {
+	u, _ := definition.Unit()
+	return u
+}
+
+func definitionHasUnit(definition schema.PropertyDefinition) bool {
+	_, hasUnit := definition.Unit()
+	return hasUnit
+}
+
+func definitionAllowsNull(definition schema.PropertyDefinition, indexes validationIndexes) bool {
+	contractID, hasContract := definition.ContractID()
+	if !hasContract {
+		return false
+	}
+	contract, ok := indexes.propertyContractByID[contractID]
+	return ok && contract.IsValid() && contract.Nullable()
 }
 
 func bindingUnitMatchesDefinition(

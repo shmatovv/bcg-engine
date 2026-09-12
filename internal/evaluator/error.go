@@ -20,6 +20,7 @@ const (
 	ErrorDefinitionNotFound
 	ErrorDefinitionNotAvailable
 	ErrorUnsupportedSeries
+	ErrorIncompatibleSeriesAxis
 	ErrorUnsupportedExpression
 	ErrorResolverFailure
 	ErrorPlanBuild
@@ -39,6 +40,7 @@ func (k ErrorKind) IsValid() bool {
 		ErrorDefinitionNotFound,
 		ErrorDefinitionNotAvailable,
 		ErrorUnsupportedSeries,
+		ErrorIncompatibleSeriesAxis,
 		ErrorUnsupportedExpression,
 		ErrorResolverFailure,
 		ErrorPlanBuild,
@@ -81,6 +83,8 @@ func (k ErrorKind) String() string {
 
 	case ErrorUnsupportedSeries:
 		return "UnsupportedSeries"
+	case ErrorIncompatibleSeriesAxis:
+		return "IncompatibleSeriesAxis"
 
 	case ErrorUnsupportedExpression:
 		return "UnsupportedExpression"

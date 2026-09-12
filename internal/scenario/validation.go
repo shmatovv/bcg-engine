@@ -1,6 +1,7 @@
 package scenario
 
 import (
+	"errors"
 	"sort"
 
 	"github.com/shmatovv/bcg-engine/internal/domain/address"
@@ -8,6 +9,8 @@ import (
 	"github.com/shmatovv/bcg-engine/internal/domain/schema"
 	"github.com/shmatovv/bcg-engine/internal/domain/semantic"
 	"github.com/shmatovv/bcg-engine/internal/model"
+	"github.com/shmatovv/bcg-engine/internal/types/series"
+	"github.com/shmatovv/bcg-engine/internal/types/unit"
 )
 
 // ValidationIssueKind identifies one Scenario compatibility failure.
@@ -21,7 +24,7 @@ const (
 	ValidationIssueTargetObjectNotFound
 	ValidationIssueTargetDefinitionNotFound
 	ValidationIssueTargetDefinitionMismatch
-	ValidationIssueUnsupportedSeriesOverride
+	ValidationIssueTemporalValueMismatch
 	ValidationIssueValueTypeMismatch
 	ValidationIssueValueUnitMismatch
 	ValidationIssueNullNotAllowed
@@ -38,7 +41,7 @@ func (k ValidationIssueKind) IsValid() bool {
 		ValidationIssueTargetObjectNotFound,
 		ValidationIssueTargetDefinitionNotFound,
 		ValidationIssueTargetDefinitionMismatch,
-		ValidationIssueUnsupportedSeriesOverride,
+		ValidationIssueTemporalValueMismatch,
 		ValidationIssueValueTypeMismatch,
 		ValidationIssueValueUnitMismatch,
 		ValidationIssueNullNotAllowed,
@@ -72,8 +75,8 @@ func (k ValidationIssueKind) String() string {
 	case ValidationIssueTargetDefinitionMismatch:
 		return "TargetDefinitionMismatch"
 
-	case ValidationIssueUnsupportedSeriesOverride:
-		return "UnsupportedSeriesOverride"
+	case ValidationIssueTemporalValueMismatch:
+		return "TemporalValueMismatch"
 
 	case ValidationIssueValueTypeMismatch:
 		return "ValueTypeMismatch"
@@ -411,18 +414,6 @@ func validateOverride(
 		return
 	}
 
-	if definition.TemporalMode() !=
-		schema.TemporalScalar {
-
-		report.append(
-			newTargetIssue(
-				ValidationIssueUnsupportedSeriesOverride,
-				target,
-				"Scenario overrides for Series properties are not implemented yet",
-			),
-		)
-	}
-
 	validateOverrideValue(
 		report,
 		version,
@@ -454,6 +445,10 @@ func validateOverrideValue(
 ) {
 	switch bindingValue.Kind() {
 	case semantic.BindingValueDefined:
+		if definition.TemporalMode() != schema.TemporalScalar {
+			report.append(newTargetIssue(ValidationIssueTemporalValueMismatch, target, "scalar Scenario override cannot target a Series property"))
+			return
+		}
 		typed, ok :=
 			bindingValue.Value()
 
@@ -503,7 +498,34 @@ func validateOverrideValue(
 			)
 		}
 
+	case semantic.BindingValueSeries:
+		stored, ok := bindingValue.Series()
+		if !ok || !stored.IsValid() {
+			report.append(newTargetIssue(ValidationIssueInvalidScenario, target, "Scenario override contains an invalid Series value"))
+			return
+		}
+		if definition.TemporalMode() != schema.TemporalSeries {
+			report.append(newTargetIssue(ValidationIssueTemporalValueMismatch, target, "Series Scenario override cannot target a Scalar property"))
+			return
+		}
+		if err := stored.ValidateAgainst(definition.ValueType(), overrideUnit(definition), overrideHasUnit(definition), overrideAllowsNull(version, definition)); err != nil {
+			switch {
+			case errors.Is(err, series.ErrElementTypeMismatch):
+				report.append(newTargetIssue(ValidationIssueValueTypeMismatch, target, "Scenario Series element type does not match PropertyDefinition"))
+			case errors.Is(err, series.ErrUnitMismatch):
+				report.append(newTargetIssue(ValidationIssueValueUnitMismatch, target, "Scenario Series unit does not exactly match PropertyDefinition unit"))
+			case errors.Is(err, series.ErrNullNotAllowed):
+				report.append(newTargetIssue(ValidationIssueNullNotAllowed, target, "Null Scenario Series sample is not allowed by PropertyContract"))
+			default:
+				report.append(newTargetIssue(ValidationIssueInvalidScenario, target, "Scenario Series value is invalid"))
+			}
+		}
+
 	case semantic.BindingValueNull:
+		if definition.TemporalMode() == schema.TemporalSeries {
+			report.append(newTargetIssue(ValidationIssueTemporalValueMismatch, target, "whole-Series Null Scenario overrides are not supported"))
+			return
+		}
 		contractID,
 			hasContract :=
 			definition.ContractID()
@@ -547,6 +569,25 @@ func validateOverrideValue(
 			),
 		)
 	}
+}
+
+func overrideUnit(definition schema.PropertyDefinition) unit.Unit {
+	u, _ := definition.Unit()
+	return u
+}
+
+func overrideHasUnit(definition schema.PropertyDefinition) bool {
+	_, hasUnit := definition.Unit()
+	return hasUnit
+}
+
+func overrideAllowsNull(version model.ModelVersion, definition schema.PropertyDefinition) bool {
+	contractID, hasContract := definition.ContractID()
+	if !hasContract {
+		return false
+	}
+	contract, ok := version.PropertyContract(contractID)
+	return ok && contract.IsValid() && contract.Nullable()
 }
 
 func validateOverrideScope(

@@ -387,7 +387,7 @@ func TestE2E_InferenceAdversarial_TemporalRules(
 	)
 
 	t.Run(
-		"series if condition rejected",
+		"series if condition with scalar branches rejected",
 		func(t *testing.T) {
 			condition := ast.Equal(
 				ast.NewSelfPropertyReference(seriesID),
@@ -413,9 +413,9 @@ func TestE2E_InferenceAdversarial_TemporalRules(
 				&conditionalErr,
 			) ||
 				conditionalErr.Kind() !=
-					typecheck.ConditionalErrorNonScalarCondition {
+					typecheck.ConditionalErrorIncompatibleTemporalModes {
 				t.Fatalf(
-					"got %v, want NonScalarCondition",
+					"got %v, want IncompatibleTemporalModes",
 					err,
 				)
 			}

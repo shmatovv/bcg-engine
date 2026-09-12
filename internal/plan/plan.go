@@ -67,6 +67,24 @@ type Node struct {
 
 	outcome    resolvervalue.Outcome
 	hasOutcome bool
+
+	// Series override values are resolved by the Series evaluator because a
+	// scalar Outcome cannot represent a whole Series. The boolean still lets
+	// the immutable effective plan cut upstream dependencies identically.
+	hasSeriesOutcome bool
+}
+
+func newSeriesOverrideNode(
+	target address.PropertyAddress,
+	kind NodeKind,
+) Node {
+	if !target.IsValid() {
+		panic("plan: node target is invalid")
+	}
+	if kind != NodeCalculationOverride && kind != NodeScenarioOverride {
+		panic("plan: invalid Series override node kind")
+	}
+	return Node{target: target, kind: kind, hasSeriesOutcome: true}
 }
 
 func newBaseNode(
@@ -156,9 +174,8 @@ func (n Node) IsValid() bool {
 
 	case NodeCalculationOverride,
 		NodeScenarioOverride:
-
-		return n.hasOutcome &&
-			n.outcome.IsValid()
+		return (n.hasOutcome && n.outcome.IsValid() && !n.hasSeriesOutcome) ||
+			(!n.hasOutcome && !n.outcome.IsValid() && n.hasSeriesOutcome)
 
 	default:
 		return false

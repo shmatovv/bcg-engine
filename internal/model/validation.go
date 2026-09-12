@@ -65,8 +65,8 @@ const (
 	ValidationIssueBaseValueForDerivedProperty
 	ValidationIssueValueTypeMismatch
 	ValidationIssueValueUnitMismatch
+	ValidationIssueTemporalValueMismatch
 	ValidationIssueNullNotAllowed
-	ValidationIssueUnsupportedSeriesBaseValue
 	ValidationIssueInvalidEffectivePeriod
 	ValidationIssueDuplicateScopeSelector
 	ValidationIssueScopeSelectorTypeMismatch
@@ -138,8 +138,8 @@ func (k ValidationIssueKind) IsValid() bool {
 		ValidationIssueBaseValueForDerivedProperty,
 		ValidationIssueValueTypeMismatch,
 		ValidationIssueValueUnitMismatch,
+		ValidationIssueTemporalValueMismatch,
 		ValidationIssueNullNotAllowed,
-		ValidationIssueUnsupportedSeriesBaseValue,
 		ValidationIssueInvalidEffectivePeriod,
 		ValidationIssueDuplicateScopeSelector,
 		ValidationIssueScopeSelectorTypeMismatch,
@@ -249,10 +249,10 @@ func (k ValidationIssueKind) String() string {
 		return "ValueTypeMismatch"
 	case ValidationIssueValueUnitMismatch:
 		return "ValueUnitMismatch"
+	case ValidationIssueTemporalValueMismatch:
+		return "TemporalValueMismatch"
 	case ValidationIssueNullNotAllowed:
 		return "NullNotAllowed"
-	case ValidationIssueUnsupportedSeriesBaseValue:
-		return "UnsupportedSeriesBaseValue"
 	case ValidationIssueInvalidEffectivePeriod:
 		return "InvalidEffectivePeriod"
 	case ValidationIssueDuplicateScopeSelector:

@@ -7,7 +7,7 @@ import (
 	enginevalue "github.com/shmatovv/bcg-engine/internal/types/value"
 )
 
-// normalizeResolvedToStaticType converts one already-evaluated scalar value to
+// normalizeResolvedToStaticType converts one already-evaluated sample value to
 // the exact deterministic representation inferred statically for the
 // expression that consumes it.
 //
@@ -26,11 +26,12 @@ func (s *evaluationState) normalizeResolvedToStaticType(
 			)
 	}
 
-	if expected.TemporalMode() != typing.TemporalScalar {
+	if expected.TemporalMode() != typing.TemporalScalar &&
+		expected.TemporalMode() != typing.TemporalSeries {
 		return enginevalue.Resolved{},
 			newError(
 				ErrorUnsupportedSeries,
-				"runtime normalization currently supports Scalar expressions only",
+				"runtime normalization received an invalid temporal expression type",
 				nil,
 			)
 	}

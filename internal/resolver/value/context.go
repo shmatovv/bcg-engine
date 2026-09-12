@@ -1,7 +1,6 @@
 package value
 
 import (
-	"github.com/shmatovv/bcg-engine/internal/domain/schema"
 	"github.com/shmatovv/bcg-engine/internal/model"
 	"github.com/shmatovv/bcg-engine/internal/runtime"
 	scenariovalidation "github.com/shmatovv/bcg-engine/internal/scenario"
@@ -75,9 +74,6 @@ func ValidateContext(
 		}
 		if definition.Owner() != owner {
 			return newError(ErrorDefinitionNotAvailable, "calculation override definition is not available on its target")
-		}
-		if definition.TemporalMode() != schema.TemporalScalar {
-			return newError(ErrorUnsupportedSeriesProperty, "Series calculation overrides are not implemented")
 		}
 		if err := validateOverride(version, definition, override); err != nil {
 			return err

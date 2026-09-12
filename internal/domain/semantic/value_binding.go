@@ -3,6 +3,7 @@ package semantic
 import (
 	"github.com/shmatovv/bcg-engine/internal/domain/scope"
 	domaintime "github.com/shmatovv/bcg-engine/internal/domain/time"
+	"github.com/shmatovv/bcg-engine/internal/types/series"
 	"github.com/shmatovv/bcg-engine/internal/types/value"
 )
 
@@ -15,11 +16,27 @@ const (
 	BindingValueInvalid BindingValueKind = iota
 	BindingValueDefined
 	BindingValueNull
+	BindingValueSeries
 )
 
 type BindingValue struct {
-	kind  BindingValueKind
-	value value.Typed
+	kind   BindingValueKind
+	value  value.Typed
+	series series.Series
+}
+
+// SeriesBindingValue constructs one immutable source Series binding value.
+// A Series is a temporal structure around ordinary element values; it is not
+// a ValueType and cannot contain runtime Undefined samples.
+func SeriesBindingValue(v series.Series) BindingValue {
+	if !v.IsValid() {
+		panic("semantic: series binding value must be valid")
+	}
+
+	return BindingValue{
+		kind:   BindingValueSeries,
+		series: v,
+	}
 }
 
 func DefinedBindingValue(v value.Typed) BindingValue {
@@ -51,6 +68,15 @@ func (v BindingValue) Value() (value.Typed, bool) {
 	return v.value, true
 }
 
+// Series returns the immutable source Series carried by a Series binding.
+func (v BindingValue) Series() (series.Series, bool) {
+	if v.kind != BindingValueSeries {
+		return series.Series{}, false
+	}
+
+	return v.series, true
+}
+
 func (v BindingValue) IsValid() bool {
 	switch v.kind {
 	case BindingValueDefined:
@@ -58,6 +84,9 @@ func (v BindingValue) IsValid() bool {
 
 	case BindingValueNull:
 		return true
+
+	case BindingValueSeries:
+		return v.series.IsValid() && !v.value.IsValid()
 
 	default:
 		return false

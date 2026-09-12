@@ -1,6 +1,7 @@
 package value
 
 import (
+	"errors"
 	"sort"
 
 	"github.com/shmatovv/bcg-engine/internal/domain/address"
@@ -10,6 +11,8 @@ import (
 	"github.com/shmatovv/bcg-engine/internal/model"
 	"github.com/shmatovv/bcg-engine/internal/runtime"
 	"github.com/shmatovv/bcg-engine/internal/types/datetime"
+	"github.com/shmatovv/bcg-engine/internal/types/series"
+	"github.com/shmatovv/bcg-engine/internal/types/unit"
 )
 
 // Resolve resolves one Input PropertyDefinition for the supplied committed
@@ -116,7 +119,7 @@ func Resolve(
 		return Resolution{},
 			newError(
 				ErrorUnsupportedSeriesProperty,
-				"Series property resolution is not implemented yet",
+				"scalar Resolve does not support Series properties; use ResolveSeries",
 			)
 	}
 
@@ -412,6 +415,9 @@ func validateOverride(
 
 	switch bindingValue.Kind() {
 	case semantic.BindingValueDefined:
+		if definition.TemporalMode() != schema.TemporalScalar {
+			return newError(ErrorInvalidCalculationOverride, "scalar calculation override cannot target a Series property")
+		}
 		defined, ok :=
 			bindingValue.Value()
 
@@ -459,7 +465,32 @@ func validateOverride(
 
 		return nil
 
+	case semantic.BindingValueSeries:
+		stored, ok := bindingValue.Series()
+		if !ok || !stored.IsValid() {
+			return newError(ErrorInvalidCalculationOverride, "Series calculation override value is invalid")
+		}
+		if definition.TemporalMode() != schema.TemporalSeries {
+			return newError(ErrorInvalidCalculationOverride, "Series calculation override cannot target a Scalar property")
+		}
+		if err := stored.ValidateAgainst(definition.ValueType(), calculationOverrideUnit(definition), calculationOverrideHasUnit(definition), calculationOverrideAllowsNull(version, definition)); err != nil {
+			switch {
+			case errors.Is(err, series.ErrElementTypeMismatch):
+				return newError(ErrorInvalidCalculationOverride, "Series calculation override element type does not match property definition")
+			case errors.Is(err, series.ErrUnitMismatch):
+				return newError(ErrorInvalidCalculationOverride, "Series calculation override unit does not exactly match property definition")
+			case errors.Is(err, series.ErrNullNotAllowed):
+				return newError(ErrorInvalidCalculationOverride, "Null Series sample is not allowed by property contract")
+			default:
+				return newError(ErrorInvalidCalculationOverride, "Series calculation override value is invalid")
+			}
+		}
+		return nil
+
 	case semantic.BindingValueNull:
+		if definition.TemporalMode() == schema.TemporalSeries {
+			return newError(ErrorInvalidCalculationOverride, "whole-Series Null calculation overrides are not supported")
+		}
 		contractID,
 			hasContract :=
 			definition.ContractID()
@@ -500,6 +531,25 @@ func validateOverride(
 			"calculation override value kind is invalid",
 		)
 	}
+}
+
+func calculationOverrideUnit(definition schema.PropertyDefinition) unit.Unit {
+	u, _ := definition.Unit()
+	return u
+}
+
+func calculationOverrideHasUnit(definition schema.PropertyDefinition) bool {
+	_, hasUnit := definition.Unit()
+	return hasUnit
+}
+
+func calculationOverrideAllowsNull(version model.ModelVersion, definition schema.PropertyDefinition) bool {
+	contractID, hasContract := definition.ContractID()
+	if !hasContract {
+		return false
+	}
+	contract, ok := version.PropertyContract(contractID)
+	return ok && contract.IsValid() && contract.Nullable()
 }
 
 func collectBaseCandidates(

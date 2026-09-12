@@ -395,7 +395,7 @@ func TestDraftValidate_BaseValue_DefinedSeriesRejected(t *testing.T) {
 	requireValidationIssue(
 		t,
 		fixture.draft.Validate(),
-		ValidationIssueUnsupportedSeriesBaseValue,
+		ValidationIssueTemporalValueMismatch,
 	)
 }
 

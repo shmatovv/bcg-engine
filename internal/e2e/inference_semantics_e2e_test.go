@@ -311,7 +311,7 @@ func TestE2E_StaticQualifiers(t *testing.T) {
 	)
 
 	t.Run(
-		"average preserves series nullable and promotes integer",
+		"aggregate rejects series map",
 		func(t *testing.T) {
 			input := typing.New(value.Integer).
 				WithTemporalMode(
@@ -319,28 +319,15 @@ func TestE2E_StaticQualifiers(t *testing.T) {
 				).
 				WithNullable(true)
 
-			got, err := typecheck.InferAggregate(
+			_, err := typecheck.InferAggregate(
 				ast.AggregateOperationAverage,
 				input,
 				true,
 			)
-			if err != nil {
-				t.Fatal(err)
+			var aggregateErr typecheck.AggregateError
+			if !errors.As(err, &aggregateErr) || aggregateErr.Kind() != typecheck.AggregateErrorUnsupportedSeriesMap {
+				t.Fatalf("got %v, want UnsupportedSeriesMap", err)
 			}
-
-			if got.ValueType() != value.Decimal {
-				t.Fatalf(
-					"got %v, want Decimal",
-					got.ValueType(),
-				)
-			}
-
-			requireTypeQualifiers(
-				t,
-				got,
-				typing.TemporalSeries,
-				true,
-			)
 		},
 	)
 

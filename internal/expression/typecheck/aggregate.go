@@ -15,6 +15,7 @@ const (
 	AggregateErrorInvalidMapType
 	AggregateErrorInvalidFilterType
 	AggregateErrorNonScalarFilter
+	AggregateErrorUnsupportedSeriesMap
 )
 
 // IsValid reports whether k is a valid aggregate error kind.
@@ -23,7 +24,8 @@ func (k AggregateErrorKind) IsValid() bool {
 	case AggregateErrorInvalidOperation,
 		AggregateErrorInvalidMapType,
 		AggregateErrorInvalidFilterType,
-		AggregateErrorNonScalarFilter:
+		AggregateErrorNonScalarFilter,
+		AggregateErrorUnsupportedSeriesMap:
 		return true
 	default:
 		return false
@@ -41,6 +43,8 @@ func (k AggregateErrorKind) String() string {
 		return "InvalidFilterType"
 	case AggregateErrorNonScalarFilter:
 		return "NonScalarFilter"
+	case AggregateErrorUnsupportedSeriesMap:
+		return "UnsupportedSeriesMap"
 	default:
 		return "Invalid"
 	}
@@ -67,6 +71,8 @@ func (e AggregateError) Error() string {
 		return "typecheck: aggregate filter must be boolean"
 	case AggregateErrorNonScalarFilter:
 		return "typecheck: aggregate filter must be scalar"
+	case AggregateErrorUnsupportedSeriesMap:
+		return "typecheck: graph aggregation over Series is not implemented"
 	default:
 		return "typecheck: invalid aggregate error"
 	}
@@ -75,13 +81,10 @@ func (e AggregateError) Error() string {
 // InferAggregate determines the static result type of a semantic-graph
 // aggregate.
 //
-// Aggregate operates over related graph elements. It does not implicitly
-// aggregate or resample the temporal axis.
-//
-// Therefore map TemporalMode is preserved:
-//
-//	SUM(Scalar<Decimal<RUB>>) -> Scalar<Decimal<RUB>>
-//	SUM(Series<Decimal<RUB>>) -> Series<Decimal<RUB>>
+// Aggregate operates over related graph elements. Series map values are
+// deliberately rejected in Time Series Core v1: there is no defined result
+// axis for an empty traversal and graph aggregation must not invent temporal
+// alignment or time reduction semantics.
 //
 // COUNT does not consume a map expression and always produces a non-nullable
 // Scalar<Integer>.
@@ -133,6 +136,9 @@ func InferAggregate(
 				kind: AggregateErrorInvalidMapType,
 			}
 		}
+		if mapType.TemporalMode() == typing.TemporalSeries {
+			return typing.Type{}, AggregateError{kind: AggregateErrorUnsupportedSeriesMap}
+		}
 
 		return mapType, nil
 
@@ -142,6 +148,9 @@ func InferAggregate(
 			return typing.Type{}, AggregateError{
 				kind: AggregateErrorInvalidMapType,
 			}
+		}
+		if mapType.TemporalMode() == typing.TemporalSeries {
+			return typing.Type{}, AggregateError{kind: AggregateErrorUnsupportedSeriesMap}
 		}
 
 		return averageResultType(mapType), nil
@@ -153,6 +162,9 @@ func InferAggregate(
 			return typing.Type{}, AggregateError{
 				kind: AggregateErrorInvalidMapType,
 			}
+		}
+		if mapType.TemporalMode() == typing.TemporalSeries {
+			return typing.Type{}, AggregateError{kind: AggregateErrorUnsupportedSeriesMap}
 		}
 
 		return mapType, nil
