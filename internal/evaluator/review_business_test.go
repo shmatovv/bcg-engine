@@ -5,16 +5,22 @@ import (
 
 	"github.com/shmatovv/bcg-engine/internal/constraint/check"
 	"github.com/shmatovv/bcg-engine/internal/constraint/feasibility"
+	"github.com/shmatovv/bcg-engine/internal/domain/address"
 	"github.com/shmatovv/bcg-engine/internal/domain/constraint"
 	"github.com/shmatovv/bcg-engine/internal/domain/identity"
 	domainrule "github.com/shmatovv/bcg-engine/internal/domain/rule"
+	domainscenario "github.com/shmatovv/bcg-engine/internal/domain/scenario"
 	"github.com/shmatovv/bcg-engine/internal/domain/schema"
 	"github.com/shmatovv/bcg-engine/internal/domain/scope"
 	"github.com/shmatovv/bcg-engine/internal/domain/semantic"
+	domaintime "github.com/shmatovv/bcg-engine/internal/domain/time"
 	"github.com/shmatovv/bcg-engine/internal/evaluator"
 	"github.com/shmatovv/bcg-engine/internal/expression/ast"
+	"github.com/shmatovv/bcg-engine/internal/model"
+	"github.com/shmatovv/bcg-engine/internal/provenance"
 	ruleeval "github.com/shmatovv/bcg-engine/internal/rule/eval"
 	"github.com/shmatovv/bcg-engine/internal/runtime"
+	"github.com/shmatovv/bcg-engine/internal/types/unit"
 	"github.com/shmatovv/bcg-engine/internal/types/value"
 )
 
@@ -152,4 +158,344 @@ func TestConstraintRuleStatesAndFeasibility(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestStandaloneConstraintAndRuleUseExplicitAggregateOrigin(t *testing.T) {
+	f := newPipelineFixture()
+	price := f.property(value.Integer, schema.InputComputation(), false)
+	applicable := f.property(value.Bool, schema.InputComputation(), true)
+	relationTypeID := identity.New()
+	endpoint := schema.EntityTypeConstraint(f.typeID)
+	f.draft.AddRelationType(schema.NewRelationType(
+		relationTypeID,
+		"links",
+		endpoint,
+		true,
+		endpoint,
+		true,
+		nil,
+	))
+	f.draft.AddRelation(semantic.NewRelation(
+		identity.New(),
+		relationTypeID,
+		f.entityID,
+		f.entityID,
+		ref(applicable),
+		true,
+	))
+	f.draft.AddValueBinding(semantic.NewValueBinding(
+		semantic.ObjectPropertyTarget(price),
+		bindingInteger(5),
+		nil,
+		domaintime.EffectivePeriod{},
+		false,
+	))
+	f.draft.AddValueBinding(semantic.NewValueBinding(
+		semantic.ObjectPropertyTarget(applicable),
+		semantic.DefinedBindingValue(value.NewTyped(value.NewBool(true))),
+		nil,
+		domaintime.EffectivePeriod{},
+		false,
+	))
+
+	source := ast.NewTraversalSourceFromEntity(
+		address.EntityRef(f.entityID),
+		ast.TraversalDirectionOutgoing,
+		relationTypeID,
+	)
+	total := ast.NewMappedAggregate(
+		source,
+		ast.NewBoundPropertyDefinitionReference(
+			ast.BoundTargetEntity,
+			price.DefinitionID(),
+		),
+		ast.AggregateOperationSum,
+	)
+	constraintID, ruleID := identity.New(), identity.New()
+	f.draft.AddConstraint(constraint.New(
+		constraintID,
+		"total within limit",
+		nil,
+		false,
+		ast.LessOrEqual(total, integer(5)),
+		constraint.SeverityHard,
+		"",
+		false,
+	))
+	f.draft.AddRule(domainrule.New(
+		ruleID,
+		"total above threshold",
+		ast.Greater(total, integer(4)),
+	))
+	version := f.commit(t)
+	context := reviewContext()
+	if dependencies, ok := version.ConstraintDependencies(constraintID); !ok ||
+		!containsDependency(dependencies.All(), price) ||
+		!containsDependency(dependencies.All(), applicable) {
+		t.Fatalf("explicit-origin constraint dependencies = %#v", dependencies)
+	}
+	if dependencies, ok := version.RuleDependencies(ruleID); !ok ||
+		!containsDependency(dependencies.Condition(), price) ||
+		!containsDependency(dependencies.Condition(), applicable) {
+		t.Fatalf("explicit-origin rule dependencies = %#v", dependencies)
+	}
+
+	constraintResult, err := check.One(version, constraintID, context)
+	if err != nil || constraintResult.State() != check.StateSatisfied {
+		t.Fatalf("explicit-origin constraint = %s, %v", constraintResult.State(), err)
+	}
+	if feasibility.Assess(checkReport(t, version, context)).State() != feasibility.StateFeasible {
+		t.Fatal("satisfied explicit-origin hard constraint must be feasible")
+	}
+	ruleResult, err := ruleeval.One(version, ruleID, context)
+	if err != nil || ruleResult.State() != ruleeval.StateActive {
+		t.Fatalf("explicit-origin rule = %s, %v", ruleResult.State(), err)
+	}
+	scenario := domainscenario.New(
+		identity.New(),
+		"aggregate input",
+		version.ID(),
+		[]domainscenario.Override{domainscenario.NewOverride(
+			price,
+			bindingInteger(3),
+			nil,
+			domaintime.EffectivePeriod{},
+			false,
+		)},
+	)
+	ruleResult, err = ruleeval.One(version, ruleID, context.WithScenario(scenario))
+	if err != nil || ruleResult.State() != ruleeval.StateInactive {
+		t.Fatalf("scenario aggregate override = %s, %v", ruleResult.State(), err)
+	}
+	calculationContext := runtime.NewCalculationContext(
+		context.TimeContext(),
+		scope.Values{},
+		[]runtime.Override{runtime.NewOverride(price, bindingInteger(6))},
+	).WithScenario(scenario)
+	ruleResult, err = ruleeval.One(version, ruleID, calculationContext)
+	if err != nil || ruleResult.State() != ruleeval.StateActive {
+		t.Fatalf("calculation aggregate precedence = %s, %v", ruleResult.State(), err)
+	}
+
+	falseContext := runtime.NewCalculationContext(
+		context.TimeContext(),
+		scope.Values{},
+		[]runtime.Override{runtime.NewOverride(
+			applicable,
+			semantic.DefinedBindingValue(value.NewTyped(value.NewBool(false))),
+		)},
+	)
+	ruleResult, err = ruleeval.One(version, ruleID, falseContext)
+	if err != nil || ruleResult.State() != ruleeval.StateInactive ||
+		provenanceContains(ruleResult.Condition().Provenance(), price) {
+		t.Fatalf("inactive relation evaluated map = %s, %v", ruleResult.State(), err)
+	}
+
+	nullContext := runtime.NewCalculationContext(
+		context.TimeContext(),
+		scope.Values{},
+		[]runtime.Override{runtime.NewOverride(applicable, semantic.NullBindingValue())},
+	)
+	constraintResult, err = check.One(version, constraintID, nullContext)
+	if err != nil || constraintResult.State() != check.StateUndefined {
+		t.Fatalf("indeterminate applicability constraint = %s, %v", constraintResult.State(), err)
+	}
+	if feasibility.Assess(checkReport(t, version, nullContext)).State() != feasibility.StateUndetermined {
+		t.Fatal("undefined explicit-origin hard constraint must be undetermined")
+	}
+	ruleResult, err = ruleeval.One(version, ruleID, nullContext)
+	if err != nil || ruleResult.State() != ruleeval.StateUndefined {
+		t.Fatalf("indeterminate applicability rule = %s, %v", ruleResult.State(), err)
+	}
+}
+
+func checkReport(
+	t *testing.T,
+	version model.ModelVersion,
+	context runtime.CalculationContext,
+) check.Report {
+	t.Helper()
+	report, err := check.All(version, context)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return report
+}
+
+func TestNestedAggregateUsesBoundEntityOriginAndPreservesMultiplicity(t *testing.T) {
+	draft := model.NewDraft()
+	rootTypeID, outerTypeID, innerTypeID := identity.New(), identity.New(), identity.New()
+	outerRelationTypeID, innerRelationTypeID := identity.New(), identity.New()
+	innerValueID, totalID := identity.New(), identity.New()
+	rootID, outerOneID, outerTwoID := identity.New(), identity.New(), identity.New()
+	innerOneID, innerTwoID, innerThreeID := identity.New(), identity.New(), identity.New()
+
+	innerValue := schema.NewPropertyDefinition(
+		innerValueID,
+		schema.EntityTypeOwner(innerTypeID),
+		identity.UUID{},
+		false,
+		"value",
+		value.Integer,
+		unit.Unit{},
+		false,
+		schema.TemporalScalar,
+		schema.InputComputation(),
+	)
+	innerAggregate := ast.NewMappedAggregate(
+		ast.NewTraversalSourceFromBoundEntity(
+			ast.TraversalDirectionOutgoing,
+			innerRelationTypeID,
+		),
+		ast.NewBoundPropertyDefinitionReference(
+			ast.BoundTargetEntity,
+			innerValueID,
+		),
+		ast.AggregateOperationSum,
+	)
+	total := schema.NewPropertyDefinition(
+		totalID,
+		schema.EntityTypeOwner(rootTypeID),
+		identity.UUID{},
+		false,
+		"total",
+		value.Integer,
+		unit.Unit{},
+		false,
+		schema.TemporalScalar,
+		schema.DerivedComputation(ast.NewMappedAggregate(
+			ast.NewTraversalSource(ast.TraversalDirectionOutgoing, outerRelationTypeID),
+			innerAggregate,
+			ast.AggregateOperationSum,
+		)),
+	)
+	draft.AddEntityType(schema.NewEntityType(rootTypeID, "root", nil, []identity.UUID{totalID}))
+	draft.AddEntityType(schema.NewEntityType(outerTypeID, "outer", nil, nil))
+	draft.AddEntityType(schema.NewEntityType(innerTypeID, "inner", nil, []identity.UUID{innerValueID}))
+	draft.AddPropertyDefinition(innerValue)
+	draft.AddPropertyDefinition(total)
+	draft.AddRelationType(schema.NewRelationType(
+		outerRelationTypeID,
+		"root-outer",
+		schema.EntityTypeConstraint(rootTypeID),
+		true,
+		schema.EntityTypeConstraint(outerTypeID),
+		true,
+		nil,
+	))
+	draft.AddRelationType(schema.NewRelationType(
+		innerRelationTypeID,
+		"outer-inner",
+		schema.EntityTypeConstraint(outerTypeID),
+		true,
+		schema.EntityTypeConstraint(innerTypeID),
+		true,
+		nil,
+	))
+	draft.AddEntity(semantic.NewEntity(rootID, rootTypeID, "", false))
+	draft.AddEntity(semantic.NewEntity(outerOneID, outerTypeID, "", false))
+	draft.AddEntity(semantic.NewEntity(outerTwoID, outerTypeID, "", false))
+	draft.AddEntity(semantic.NewEntity(innerOneID, innerTypeID, "", false))
+	draft.AddEntity(semantic.NewEntity(innerTwoID, innerTypeID, "", false))
+	draft.AddEntity(semantic.NewEntity(innerThreeID, innerTypeID, "", false))
+	// Distinct Relation identities to outerOne intentionally count twice.
+	draft.AddRelation(semantic.NewRelation(identity.New(), outerRelationTypeID, rootID, outerOneID, nil, false))
+	draft.AddRelation(semantic.NewRelation(identity.New(), outerRelationTypeID, rootID, outerTwoID, nil, false))
+	draft.AddRelation(semantic.NewRelation(identity.New(), outerRelationTypeID, rootID, outerOneID, nil, false))
+	draft.AddRelation(semantic.NewRelation(identity.New(), innerRelationTypeID, outerOneID, innerOneID, nil, false))
+	draft.AddRelation(semantic.NewRelation(identity.New(), innerRelationTypeID, outerOneID, innerTwoID, nil, false))
+	draft.AddRelation(semantic.NewRelation(identity.New(), innerRelationTypeID, outerTwoID, innerThreeID, nil, false))
+	for _, binding := range []struct {
+		entityID identity.UUID
+		number   int64
+	}{
+		{innerOneID, 2},
+		{innerTwoID, 3},
+		{innerThreeID, 4},
+	} {
+		draft.AddValueBinding(semantic.NewValueBinding(
+			semantic.ObjectPropertyTarget(address.NewPropertyAddress(address.EntityRef(binding.entityID), innerValueID)),
+			bindingInteger(binding.number),
+			nil,
+			domaintime.EffectivePeriod{},
+			false,
+		))
+	}
+
+	version := reviewCommit(t, draft)
+	result, err := evaluator.Evaluate(
+		version,
+		address.NewPropertyAddress(address.EntityRef(rootID), totalID),
+		reviewContext(),
+	)
+	if err != nil || !result.Value().IsDefined() || result.Value().Value().Raw().Integer().Int64() != 14 {
+		t.Fatalf("nested aggregate = %#v, %v", result.Value(), err)
+	}
+	if got := countAggregateItems(result.Provenance()); got != 8 {
+		t.Fatalf("aggregate provenance items = %d, want 8", got)
+	}
+}
+
+func TestAggregateProvenanceRetainsRelationAndEntityIdentity(t *testing.T) {
+	f := newPipelineFixture()
+	input := f.property(value.Integer, schema.InputComputation(), false)
+	relationTypeID, relationID := identity.New(), identity.New()
+	endpoint := schema.EntityTypeConstraint(f.typeID)
+	f.draft.AddRelationType(schema.NewRelationType(relationTypeID, "links", endpoint, true, endpoint, true, nil))
+	f.draft.AddRelation(semantic.NewRelation(relationID, relationTypeID, f.entityID, f.entityID, nil, false))
+	total := f.property(value.Integer, schema.DerivedComputation(ast.NewMappedAggregate(
+		ast.NewTraversalSource(ast.TraversalDirectionBoth, relationTypeID),
+		ast.NewBoundPropertyDefinitionReference(ast.BoundTargetEntity, input.DefinitionID()),
+		ast.AggregateOperationSum,
+	)), false)
+	f.draft.AddValueBinding(semantic.NewValueBinding(
+		semantic.ObjectPropertyTarget(input),
+		bindingInteger(7),
+		nil,
+		domaintime.EffectivePeriod{},
+		false,
+	))
+	result, err := evaluator.Evaluate(f.commit(t), total, reviewContext())
+	if err != nil {
+		t.Fatal(err)
+	}
+	relation, entity, found := firstAggregateItem(result.Provenance())
+	if !found || relation != address.RelationRef(relationID) || entity != address.EntityRef(f.entityID) {
+		t.Fatalf("aggregate item identity = %v / %v / %v", relation, entity, found)
+	}
+}
+
+func firstAggregateItem(node provenance.Node) (address.ObjectRef, address.ObjectRef, bool) {
+	if node.Kind() == provenance.KindAggregateItem {
+		return node.AggregateItem()
+	}
+	for _, child := range node.Children() {
+		if relation, entity, found := firstAggregateItem(child); found {
+			return relation, entity, true
+		}
+	}
+	return address.ObjectRef{}, address.ObjectRef{}, false
+}
+
+func countAggregateItems(node provenance.Node) int {
+	count := 0
+	if node.Kind() == provenance.KindAggregateItem {
+		count++
+	}
+	for _, child := range node.Children() {
+		count += countAggregateItems(child)
+	}
+	return count
+}
+
+func containsDependency(
+	dependencies []address.PropertyAddress,
+	target address.PropertyAddress,
+) bool {
+	for _, dependency := range dependencies {
+		if dependency == target {
+			return true
+		}
+	}
+	return false
 }

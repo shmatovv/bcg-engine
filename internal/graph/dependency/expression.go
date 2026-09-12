@@ -9,8 +9,9 @@ import (
 // referenced by expression after structural Aggregate expansion.
 //
 // The expression is evaluated without an implicit self object. Therefore
-// SelfPropertyReference and Aggregate traversal that requires self are
-// rejected. AbsolutePropertyReference remains fully supported.
+// SelfPropertyReference and self-origin Aggregate traversal are rejected.
+// AbsolutePropertyReference and Aggregate traversal with an explicit Entity
+// origin remain fully supported.
 //
 // The result is deterministic and sorted by PropertyAddress.
 func ExtractStandaloneExpression(

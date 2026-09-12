@@ -88,6 +88,7 @@ const (
 	KindBaseTypeBinding
 	KindMissingValue
 	KindAmbiguousValue
+	KindAggregateItem
 )
 
 func (k Kind) IsValid() bool {
@@ -102,7 +103,8 @@ func (k Kind) IsValid() bool {
 		KindBaseObjectBinding,
 		KindBaseTypeBinding,
 		KindMissingValue,
-		KindAmbiguousValue:
+		KindAmbiguousValue,
+		KindAggregateItem:
 		return true
 	default:
 		return false
@@ -133,6 +135,8 @@ func (k Kind) String() string {
 		return "MissingValue"
 	case KindAmbiguousValue:
 		return "AmbiguousValue"
+	case KindAggregateItem:
+		return "AggregateItem"
 	default:
 		return "Invalid"
 	}

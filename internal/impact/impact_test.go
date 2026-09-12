@@ -417,6 +417,34 @@ func TestAnalyzeStructuralIncludesConcreteAggregateMapDependencies(t *testing.T)
 	requireTargets(t, observed, total)
 }
 
+func TestAnalyzeObservedAggregateOmitsFilteredMapDependency(t *testing.T) {
+	f := newImpactFixture()
+	input := f.scalar(value.Integer, schema.InputComputation())
+	relationTypeID := identity.New()
+	endpoint := schema.EntityTypeConstraint(f.typeID)
+	f.draft.AddRelationType(schema.NewRelationType(relationTypeID, "links", endpoint, true, endpoint, true, nil))
+	f.draft.AddRelation(semantic.NewRelation(identity.New(), relationTypeID, f.entityID, f.entityID, boolean(true), true))
+	total := f.scalar(value.Integer, schema.DerivedComputation(ast.NewFilteredMappedAggregate(
+		ast.NewTraversalSource(ast.TraversalDirectionBoth, relationTypeID),
+		boolean(false),
+		ast.NewBoundPropertyDefinitionReference(ast.BoundTargetEntity, input.DefinitionID()),
+		ast.AggregateOperationSum,
+	)))
+	bind(f, input, 5)
+	version := f.commit(t)
+
+	structural, err := impact.AnalyzeStructural(version, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	requireTargets(t, structural, total)
+	observed, err := impact.AnalyzeObserved(version, input, impactContext(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	requireTargets(t, observed)
+}
+
 func TestAnalyzeObservedCoalesceIncludesOnlyActualFallback(t *testing.T) {
 	withPrimary := func(t *testing.T, primary semantic.BindingValue) (model.ModelVersion, address.PropertyAddress, address.PropertyAddress) {
 		t.Helper()

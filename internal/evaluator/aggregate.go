@@ -46,15 +46,6 @@ func (s *evaluationState) evaluateAggregate(
 			invalidCommittedExpressionError()
 	}
 
-	if context.self.Kind() != address.ObjectRefEntity {
-		return Result{},
-			newError(
-				ErrorInvariantViolation,
-				"aggregate traversal requires Entity self",
-				nil,
-			)
-	}
-
 	staticContext, err := context.inferenceContext(s)
 	if err != nil {
 		return Result{}, err
@@ -97,8 +88,16 @@ func (s *evaluationState) evaluateAggregate(
 			)
 	}
 
+	origin, err := s.aggregateTraversalOrigin(
+		context,
+		expression.Source(),
+	)
+	if err != nil {
+		return Result{}, err
+	}
+
 	items, err := s.aggregateTraversalItems(
-		context.self,
+		origin,
 		expression.Source(),
 	)
 	if err != nil {
@@ -120,6 +119,8 @@ func (s *evaluationState) evaluateAggregate(
 	count := int64(0)
 
 	for _, item := range items {
+		itemProvenance := make([]provenance.Node, 0, 3)
+
 		relation, ok := s.version.Relation(
 			item.relation.ID(),
 		)
@@ -141,13 +142,20 @@ func (s *evaluationState) evaluateAggregate(
 		}
 
 		if applicabilityProvenance.IsValid() {
-			provenanceChildren = append(
-				provenanceChildren,
+			itemProvenance = append(
+				itemProvenance,
 				applicabilityProvenance,
 			)
 		}
 
 		if indeterminate {
+			provenanceChildren = append(provenanceChildren,
+				aggregateItemProvenance(
+					item,
+					itemProvenance,
+					undefined(enginevalue.UndefinedIndeterminateCondition),
+				),
+			)
 			return newResult(
 				undefined(
 					enginevalue.UndefinedIndeterminateCondition,
@@ -160,6 +168,9 @@ func (s *evaluationState) evaluateAggregate(
 		}
 
 		if !applicable {
+			provenanceChildren = append(provenanceChildren,
+				aggregateItemProvenance(item, itemProvenance, boolResolved(false)),
+			)
 			continue
 		}
 
@@ -178,8 +189,8 @@ func (s *evaluationState) evaluateAggregate(
 				return Result{}, err
 			}
 
-			provenanceChildren = append(
-				provenanceChildren,
+			itemProvenance = append(
+				itemProvenance,
 				provenance.NewOperation(
 					"AggregateFilter",
 					filterResult.provenance,
@@ -194,6 +205,13 @@ func (s *evaluationState) evaluateAggregate(
 			}
 
 			if filterIndeterminate {
+				provenanceChildren = append(provenanceChildren,
+					aggregateItemProvenance(
+						item,
+						itemProvenance,
+						undefined(enginevalue.UndefinedIndeterminateCondition),
+					),
+				)
 				return newResult(
 					undefined(
 						enginevalue.UndefinedIndeterminateCondition,
@@ -206,12 +224,18 @@ func (s *evaluationState) evaluateAggregate(
 			}
 
 			if !passes {
+				provenanceChildren = append(provenanceChildren,
+					aggregateItemProvenance(item, itemProvenance, boolResolved(false)),
+				)
 				continue
 			}
 		}
 
 		if expression.Operation() == ast.AggregateOperationCount {
 			count++
+			provenanceChildren = append(provenanceChildren,
+				aggregateItemProvenance(item, itemProvenance, boolResolved(true)),
+			)
 			continue
 		}
 
@@ -233,8 +257,8 @@ func (s *evaluationState) evaluateAggregate(
 			return Result{}, err
 		}
 
-		provenanceChildren = append(
-			provenanceChildren,
+		itemProvenance = append(
+			itemProvenance,
 			provenance.NewOperation(
 				"AggregateMap",
 				mapResult.provenance,
@@ -243,6 +267,9 @@ func (s *evaluationState) evaluateAggregate(
 
 		if mapResult.value.IsNull() ||
 			mapResult.value.IsUndefined() {
+			provenanceChildren = append(provenanceChildren,
+				aggregateItemProvenance(item, itemProvenance, mapResult.value),
+			)
 			return newResult(
 				mapResult.value,
 				provenance.NewOperation(
@@ -255,6 +282,10 @@ func (s *evaluationState) evaluateAggregate(
 		mapped = append(
 			mapped,
 			mapResult.value,
+		)
+
+		provenanceChildren = append(provenanceChildren,
+			aggregateItemProvenance(item, itemProvenance, mapResult.value),
 		)
 	}
 
@@ -275,6 +306,79 @@ func (s *evaluationState) evaluateAggregate(
 			provenanceChildren...,
 		),
 	), nil
+}
+
+func aggregateItemProvenance(
+	item concreteExpressionBinding,
+	children []provenance.Node,
+	resolved enginevalue.Resolved,
+) provenance.Node {
+	if !item.IsValid() || !resolved.IsValid() {
+		panic("evaluator: invalid aggregate item provenance")
+	}
+
+	return provenance.NewAggregateItem(
+		item.relation,
+		item.entity,
+		children...,
+	).WithResolved(resolved)
+}
+
+func (s *evaluationState) aggregateTraversalOrigin(
+	context expressionContext,
+	source ast.TraversalSource,
+) (address.ObjectRef, error) {
+	if !source.IsValid() {
+		return address.ObjectRef{}, newError(
+			ErrorInvariantViolation,
+			"aggregate traversal source is invalid",
+			nil,
+		)
+	}
+
+	switch source.Origin() {
+	case ast.TraversalOriginSelf:
+		if !context.self.IsValid() ||
+			context.self.Kind() != address.ObjectRefEntity {
+			return address.ObjectRef{}, newError(
+				ErrorInvariantViolation,
+				"aggregate traversal requires Entity self",
+				nil,
+			)
+		}
+		return context.self, nil
+
+	case ast.TraversalOriginAbsoluteEntity:
+		origin, ok := source.AbsoluteOrigin()
+		if !ok || !origin.IsValid() ||
+			origin.Kind() != address.ObjectRefEntity {
+			return address.ObjectRef{}, newError(
+				ErrorInvariantViolation,
+				"aggregate traversal explicit origin must be an Entity object",
+				nil,
+			)
+		}
+		return origin, nil
+
+	case ast.TraversalOriginBoundEntity:
+		origin, ok := context.boundObject(ast.BoundTargetEntity)
+		if !ok || !origin.IsValid() ||
+			origin.Kind() != address.ObjectRefEntity {
+			return address.ObjectRef{}, newError(
+				ErrorInvariantViolation,
+				"aggregate traversal bound origin is unavailable",
+				nil,
+			)
+		}
+		return origin, nil
+
+	default:
+		return address.ObjectRef{}, newError(
+			ErrorInvariantViolation,
+			"aggregate traversal origin is invalid",
+			nil,
+		)
+	}
 }
 
 func (s *evaluationState) evaluateRelationApplicability(
@@ -533,92 +637,86 @@ func (s *evaluationState) aggregateTraversalItems(
 			)
 	}
 
-	relations := s.version.Relations()
-
-	sort.Slice(
-		relations,
-		func(i, j int) bool {
-			return compareEvaluatorUUID(
-				relations[i].ID(),
-				relations[j].ID(),
-			) < 0
-		},
-	)
-
-	result := make(
-		[]concreteExpressionBinding,
-		0,
-	)
-
 	selfID := self.ID()
 
+	switch source.Direction() {
+	case ast.TraversalDirectionOutgoing:
+		return aggregateBindingsFromRelations(
+			s.version.OutgoingRelations(selfID, source.RelationTypeID()),
+			true,
+		), nil
+
+	case ast.TraversalDirectionIncoming:
+		return aggregateBindingsFromRelations(
+			s.version.IncomingRelations(selfID, source.RelationTypeID()),
+			false,
+		), nil
+
+	case ast.TraversalDirectionBoth:
+		return aggregateBindingsFromBothDirections(
+			s.version.OutgoingRelations(selfID, source.RelationTypeID()),
+			s.version.IncomingRelations(selfID, source.RelationTypeID()),
+		), nil
+
+	default:
+		return nil, newError(
+			ErrorInvariantViolation,
+			"aggregate traversal direction is invalid",
+			nil,
+		)
+	}
+}
+
+func aggregateBindingsFromRelations(
+	relations []semantic.Relation,
+	outgoing bool,
+) []concreteExpressionBinding {
+	result := make([]concreteExpressionBinding, 0, len(relations))
 	for _, relation := range relations {
-		if !relation.IsValid() ||
-			relation.TypeID() != source.RelationTypeID() {
-			continue
+		entityID := relation.From()
+		if outgoing {
+			entityID = relation.To()
 		}
+		result = append(result, newAggregateBinding(relation, entityID))
+	}
+	return result
+}
 
-		switch source.Direction() {
-		case ast.TraversalDirectionOutgoing:
-			if relation.From() != selfID {
-				continue
-			}
-
-			result = append(
-				result,
-				newAggregateBinding(
-					relation,
-					relation.To(),
-				),
-			)
-
-		case ast.TraversalDirectionIncoming:
-			if relation.To() != selfID {
-				continue
-			}
-
-			result = append(
-				result,
-				newAggregateBinding(
-					relation,
-					relation.From(),
-				),
-			)
-
-		case ast.TraversalDirectionBoth:
-			if relation.From() == selfID {
-				result = append(
-					result,
-					newAggregateBinding(
-						relation,
-						relation.To(),
-					),
-				)
-			}
-
-			// A self-loop is emitted only once.
-			if relation.To() == selfID &&
-				relation.From() != selfID {
-				result = append(
-					result,
-					newAggregateBinding(
-						relation,
-						relation.From(),
-					),
-				)
-			}
-
-		default:
-			return nil,
-				newError(
-					ErrorInvariantViolation,
-					"aggregate traversal direction is invalid",
-					nil,
-				)
-		}
+func aggregateBindingsFromBothDirections(
+	outgoing []semantic.Relation,
+	incoming []semantic.Relation,
+) []concreteExpressionBinding {
+	type item struct {
+		binding concreteExpressionBinding
 	}
 
-	return result, nil
+	items := make([]item, 0, len(outgoing)+len(incoming))
+	seen := make(map[identity.UUID]struct{}, len(outgoing)+len(incoming))
+	for _, relation := range outgoing {
+		items = append(items, item{binding: newAggregateBinding(relation, relation.To())})
+		seen[relation.ID()] = struct{}{}
+	}
+	for _, relation := range incoming {
+		// The same relation is in both indexes only for a self-loop. Parallel
+		// relations have distinct UUIDs and therefore remain distinct items.
+		if _, exists := seen[relation.ID()]; exists {
+			continue
+		}
+		items = append(items, item{binding: newAggregateBinding(relation, relation.From())})
+	}
+
+	sort.Slice(items, func(i, j int) bool {
+		return compareEvaluatorUUID(
+			items[i].binding.relation.ID(),
+			items[j].binding.relation.ID(),
+		) < 0
+	})
+
+	result := make([]concreteExpressionBinding, 0, len(items))
+	for _, item := range items {
+		result = append(result, item.binding)
+	}
+	return result
 }
 
 func newAggregateBinding(

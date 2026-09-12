@@ -16,9 +16,9 @@ import (
 // CalculationContext.
 //
 // Standalone means there is no implicit Entity/Relation self object. Absolute
-// property references are supported. SelfPropertyReference and Aggregate
-// traversal that requires self are rejected by static inference/dependency
-// extraction.
+// property references and Aggregates with an explicit Entity traversal origin
+// are supported. SelfPropertyReference and self-origin Aggregate traversal are
+// rejected by static inference/dependency extraction.
 //
 // Constraint applicability/assertion evaluation uses this API.
 func EvaluateExpression(

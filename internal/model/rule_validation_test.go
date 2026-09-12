@@ -47,6 +47,19 @@ func TestDraftValidateRuleBooleanContractsAndReferences(t *testing.T) {
 		requireValidationIssue(t, draft.Validate(), ValidationIssueInvalidRuleCondition)
 	})
 
+	t.Run("self-origin aggregate has no implicit standalone self", func(t *testing.T) {
+		draft := NewDraft()
+		typeID, entityID, relationTypeID := identity.New(), identity.New(), identity.New()
+		draft.AddEntityType(schema.NewEntityType(typeID, "node", nil, nil))
+		endpoint := schema.EntityTypeConstraint(typeID)
+		draft.AddRelationType(schema.NewRelationType(relationTypeID, "edge", endpoint, true, endpoint, true, nil))
+		draft.AddEntity(semantic.NewEntity(entityID, typeID, "", false))
+		draft.AddRelation(semantic.NewRelation(identity.New(), relationTypeID, entityID, entityID, nil, false))
+		count := ast.NewCountAggregate(ast.NewTraversalSource(ast.TraversalDirectionOutgoing, relationTypeID))
+		draft.AddRule(domainrule.New(identity.New(), "implicit aggregate", ast.Greater(count, intConstant(0))))
+		requireValidationIssue(t, draft.Validate(), ValidationIssueInvalidRuleCondition)
+	})
+
 	t.Run("malformed expression", func(t *testing.T) {
 		draft := NewDraft()
 		draft.AddRule(domainrule.New(identity.New(), "malformed", ast.Constant{}))

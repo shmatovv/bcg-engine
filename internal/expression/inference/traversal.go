@@ -18,6 +18,10 @@ const (
 	TraversalErrorMissingSelf
 	TraversalErrorInvalidSelf
 	TraversalErrorSelfTypeNotFound
+	TraversalErrorInvalidAbsoluteOrigin
+	TraversalErrorAbsoluteOriginTypeNotFound
+	TraversalErrorMissingBoundOrigin
+	TraversalErrorBoundOriginNotConcrete
 	TraversalErrorMissingEndpoint
 	TraversalErrorEndpointNotApplicable
 )
@@ -31,6 +35,10 @@ func (k TraversalErrorKind) IsValid() bool {
 		TraversalErrorMissingSelf,
 		TraversalErrorInvalidSelf,
 		TraversalErrorSelfTypeNotFound,
+		TraversalErrorInvalidAbsoluteOrigin,
+		TraversalErrorAbsoluteOriginTypeNotFound,
+		TraversalErrorMissingBoundOrigin,
+		TraversalErrorBoundOriginNotConcrete,
 		TraversalErrorMissingEndpoint,
 		TraversalErrorEndpointNotApplicable:
 		return true
@@ -54,6 +62,14 @@ func (k TraversalErrorKind) String() string {
 		return "InvalidSelf"
 	case TraversalErrorSelfTypeNotFound:
 		return "SelfTypeNotFound"
+	case TraversalErrorInvalidAbsoluteOrigin:
+		return "InvalidAbsoluteOrigin"
+	case TraversalErrorAbsoluteOriginTypeNotFound:
+		return "AbsoluteOriginTypeNotFound"
+	case TraversalErrorMissingBoundOrigin:
+		return "MissingBoundOrigin"
+	case TraversalErrorBoundOriginNotConcrete:
+		return "BoundOriginNotConcrete"
 	case TraversalErrorMissingEndpoint:
 		return "MissingEndpoint"
 	case TraversalErrorEndpointNotApplicable:
@@ -88,6 +104,14 @@ func (e TraversalError) Error() string {
 		return "inference: traversal self must be an entity type"
 	case TraversalErrorSelfTypeNotFound:
 		return "inference: traversal self entity type not found"
+	case TraversalErrorInvalidAbsoluteOrigin:
+		return "inference: traversal explicit origin must resolve to an entity type"
+	case TraversalErrorAbsoluteOriginTypeNotFound:
+		return "inference: traversal explicit origin entity type not found"
+	case TraversalErrorMissingBoundOrigin:
+		return "inference: traversal bound entity origin requires an enclosing aggregate binding"
+	case TraversalErrorBoundOriginNotConcrete:
+		return "inference: traversal bound entity origin must have one concrete entity type"
 	case TraversalErrorMissingEndpoint:
 		return "inference: traversal endpoint constraint is unavailable"
 	case TraversalErrorEndpointNotApplicable:
@@ -98,7 +122,7 @@ func (e TraversalError) Error() string {
 }
 
 // BindingFromTraversal derives the static aggregate binding produced by
-// source relative to the current self entity.
+// source relative to its explicit lexical origin.
 //
 // Traversal is not interpreted only from RelationType direction. The current
 // self entity must also be eligible to occupy the corresponding relation
@@ -143,27 +167,9 @@ func BindingFromTraversal(
 		}
 	}
 
-	selfOwner, ok := context.Self()
-	if !ok {
-		return Binding{}, TraversalError{
-			kind: TraversalErrorMissingSelf,
-		}
-	}
-
-	if !selfOwner.IsValid() ||
-		selfOwner.Kind() != schema.PropertyOwnerEntityType {
-		return Binding{}, TraversalError{
-			kind: TraversalErrorInvalidSelf,
-		}
-	}
-
-	selfType, ok := resolver.EntityType(selfOwner.ID())
-	if !ok ||
-		!selfType.IsValid() ||
-		selfType.ID() != selfOwner.ID() {
-		return Binding{}, TraversalError{
-			kind: TraversalErrorSelfTypeNotFound,
-		}
+	selfType, err := traversalOriginEntityType(source, context, resolver)
+	if err != nil {
+		return Binding{}, err
 	}
 
 	relationType, ok := resolver.RelationType(
@@ -220,6 +226,82 @@ func BindingFromTraversal(
 			kind: TraversalErrorInvalidSource,
 		}
 	}
+}
+
+func traversalOriginEntityType(
+	source ast.TraversalSource,
+	context Context,
+	resolver Resolver,
+) (schema.EntityType, error) {
+	var owner schema.PropertyOwner
+
+	switch source.Origin() {
+	case ast.TraversalOriginSelf:
+		selfOwner, ok := context.Self()
+		if !ok {
+			return schema.EntityType{}, TraversalError{
+				kind: TraversalErrorMissingSelf,
+			}
+		}
+		if !selfOwner.IsValid() ||
+			selfOwner.Kind() != schema.PropertyOwnerEntityType {
+			return schema.EntityType{}, TraversalError{
+				kind: TraversalErrorInvalidSelf,
+			}
+		}
+		owner = selfOwner
+
+	case ast.TraversalOriginAbsoluteEntity:
+		origin, ok := source.AbsoluteOrigin()
+		if !ok {
+			return schema.EntityType{}, TraversalError{
+				kind: TraversalErrorInvalidAbsoluteOrigin,
+			}
+		}
+		resolvedOwner, ok := resolver.ObjectType(origin)
+		if !ok || !resolvedOwner.IsValid() ||
+			resolvedOwner.Kind() != schema.PropertyOwnerEntityType {
+			return schema.EntityType{}, TraversalError{
+				kind: TraversalErrorInvalidAbsoluteOrigin,
+			}
+		}
+		owner = resolvedOwner
+
+	case ast.TraversalOriginBoundEntity:
+		binding, ok := context.Binding()
+		if !ok {
+			return schema.EntityType{}, TraversalError{
+				kind: TraversalErrorMissingBoundOrigin,
+			}
+		}
+		boundOwner, ok := binding.Entity().ConcreteOwner()
+		if !ok || !boundOwner.IsValid() ||
+			boundOwner.Kind() != schema.PropertyOwnerEntityType {
+			return schema.EntityType{}, TraversalError{
+				kind: TraversalErrorBoundOriginNotConcrete,
+			}
+		}
+		owner = boundOwner
+
+	default:
+		return schema.EntityType{}, TraversalError{
+			kind: TraversalErrorInvalidSource,
+		}
+	}
+
+	entityType, ok := resolver.EntityType(owner.ID())
+	if !ok || !entityType.IsValid() || entityType.ID() != owner.ID() {
+		kind := TraversalErrorSelfTypeNotFound
+		switch source.Origin() {
+		case ast.TraversalOriginAbsoluteEntity:
+			kind = TraversalErrorAbsoluteOriginTypeNotFound
+		case ast.TraversalOriginBoundEntity:
+			kind = TraversalErrorBoundOriginNotConcrete
+		}
+		return schema.EntityType{}, TraversalError{kind: kind}
+	}
+
+	return entityType, nil
 }
 
 // outgoingBinding derives:

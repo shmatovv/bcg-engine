@@ -289,6 +289,42 @@ func (v ModelVersion) Relations() []semantic.Relation {
 	return cloneSlice(v.relations)
 }
 
+// OutgoingRelations returns the immutable model's Relations of relationTypeID
+// whose From endpoint is entityID. Results are in canonical Relation UUID
+// order and are defensively copied. This is semantic-graph membership data,
+// not a value dependency query.
+func (v ModelVersion) OutgoingRelations(
+	entityID identity.UUID,
+	relationTypeID identity.UUID,
+) []semantic.Relation {
+	if entityID.IsZero() || relationTypeID.IsZero() {
+		return nil
+	}
+
+	return cloneSlice(v.indexes.outgoingRelationsByEndpoint[relationTraversalKey{
+		entityID:       entityID,
+		relationTypeID: relationTypeID,
+	}])
+}
+
+// IncomingRelations returns the immutable model's Relations of relationTypeID
+// whose To endpoint is entityID. Results are in canonical Relation UUID order
+// and are defensively copied. This is semantic-graph membership data, not a
+// value dependency query.
+func (v ModelVersion) IncomingRelations(
+	entityID identity.UUID,
+	relationTypeID identity.UUID,
+) []semantic.Relation {
+	if entityID.IsZero() || relationTypeID.IsZero() {
+		return nil
+	}
+
+	return cloneSlice(v.indexes.incomingRelationsByEndpoint[relationTraversalKey{
+		entityID:       entityID,
+		relationTypeID: relationTypeID,
+	}])
+}
+
 func (v ModelVersion) ValueBindings() []semantic.ValueBinding {
 	return cloneSlice(v.valueBindings)
 }

@@ -31,6 +31,13 @@ type indexes struct {
 
 	relationByID map[identity.UUID]semantic.Relation
 
+	// Semantic traversal indexes are distinct from the value dependency
+	// graph. They answer one-hop relation membership in canonical Relation
+	// UUID order; evaluating an Aggregate is what turns traversal into
+	// concrete property dependencies.
+	outgoingRelationsByEndpoint map[relationTraversalKey][]semantic.Relation
+	incomingRelationsByEndpoint map[relationTraversalKey][]semantic.Relation
+
 	constraintByID map[identity.UUID]constraint.Constraint
 
 	constraintDependenciesByID map[identity.UUID]ConstraintDependencies
@@ -46,6 +53,11 @@ type indexes struct {
 	entityTypesByTrait map[identity.UUID][]schema.EntityType
 
 	contractImplementationByOwner map[schema.PropertyOwner]map[identity.UUID]schema.PropertyDefinition
+}
+
+type relationTraversalKey struct {
+	entityID       identity.UUID
+	relationTypeID identity.UUID
 }
 
 func buildIndexes(
@@ -101,6 +113,14 @@ func buildIndexes(
 		relationByID: make(
 			map[identity.UUID]semantic.Relation,
 			len(relations),
+		),
+
+		outgoingRelationsByEndpoint: make(
+			map[relationTraversalKey][]semantic.Relation,
+		),
+
+		incomingRelationsByEndpoint: make(
+			map[relationTraversalKey][]semantic.Relation,
 		),
 
 		constraintByID: make(
@@ -209,6 +229,24 @@ func buildIndexes(
 	for _, relation := range relations {
 		result.relationByID[relation.ID()] =
 			relation
+
+		outgoingKey := relationTraversalKey{
+			entityID:       relation.From(),
+			relationTypeID: relation.TypeID(),
+		}
+		result.outgoingRelationsByEndpoint[outgoingKey] = append(
+			result.outgoingRelationsByEndpoint[outgoingKey],
+			relation,
+		)
+
+		incomingKey := relationTraversalKey{
+			entityID:       relation.To(),
+			relationTypeID: relation.TypeID(),
+		}
+		result.incomingRelationsByEndpoint[incomingKey] = append(
+			result.incomingRelationsByEndpoint[incomingKey],
+			relation,
+		)
 	}
 
 	for _, modelConstraint := range constraints {
@@ -237,9 +275,25 @@ func buildIndexes(
 			entityTypes
 	}
 
+	for key, relationValues := range result.outgoingRelationsByEndpoint {
+		sortRelationsByID(relationValues)
+		result.outgoingRelationsByEndpoint[key] = relationValues
+	}
+
+	for key, relationValues := range result.incomingRelationsByEndpoint {
+		sortRelationsByID(relationValues)
+		result.incomingRelationsByEndpoint[key] = relationValues
+	}
+
 	for _, binding := range valueBindings {
 		target := binding.Target()
 		result.valueBindingsByTarget[target] = append(result.valueBindingsByTarget[target], binding)
 	}
 	return result
+}
+
+func sortRelationsByID(relations []semantic.Relation) {
+	sort.Slice(relations, func(i, j int) bool {
+		return relations[i].ID().String() < relations[j].ID().String()
+	})
 }

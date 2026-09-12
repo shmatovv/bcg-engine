@@ -12,6 +12,7 @@ import (
 //
 // A node may additionally carry exactly one of:
 //   - a concrete PropertyAddress;
+//   - a traversed Relation and its related Entity;
 //   - an operation name;
 //   - the selected ValueBinding;
 //   - the selected calculation Override;
@@ -25,6 +26,10 @@ type Node struct {
 
 	property    address.PropertyAddress
 	hasProperty bool
+
+	relation         address.ObjectRef
+	relatedEntity    address.ObjectRef
+	hasAggregateItem bool
 
 	operation string
 	decision  Decision
@@ -71,6 +76,32 @@ func NewProperty(
 func NewConstant() Node {
 	return Node{
 		kind: KindConstant,
+	}
+}
+
+// NewAggregateItem records one concrete semantic-graph traversal occurrence.
+// Its children are only the applicability, filter and map steps that actually
+// executed for this Relation. Relation UUID identity is retained even for a
+// Count with no property reads, so Explain and observed-impact consumers do
+// not have to reconstruct traversal from the AST.
+func NewAggregateItem(
+	relation address.ObjectRef,
+	relatedEntity address.ObjectRef,
+	children ...Node,
+) Node {
+	if !relation.IsValid() || relation.Kind() != address.ObjectRefRelation {
+		panic("provenance: aggregate item relation must be a relation reference")
+	}
+	if !relatedEntity.IsValid() || relatedEntity.Kind() != address.ObjectRefEntity {
+		panic("provenance: aggregate item related entity must be an entity reference")
+	}
+
+	return Node{
+		kind:             KindAggregateItem,
+		relation:         relation,
+		relatedEntity:    relatedEntity,
+		hasAggregateItem: true,
+		children:         cloneChildren(children),
 	}
 }
 
@@ -191,6 +222,16 @@ func (n Node) Property() (
 		n.hasProperty
 }
 
+// AggregateItem returns the concrete Relation and opposite-endpoint Entity
+// represented by a KindAggregateItem provenance node.
+func (n Node) AggregateItem() (
+	address.ObjectRef,
+	address.ObjectRef,
+	bool,
+) {
+	return n.relation, n.relatedEntity, n.hasAggregateItem
+}
+
 func (n Node) Operation() (
 	string,
 	bool,
@@ -280,6 +321,7 @@ func (n Node) IsValid() bool {
 
 		return n.hasProperty &&
 			n.property.IsValid() &&
+			!n.hasAggregateItem &&
 			n.operation == "" &&
 			n.decision == DecisionNone &&
 			!n.hasBinding &&
@@ -288,6 +330,7 @@ func (n Node) IsValid() bool {
 
 	case KindConstant:
 		return !n.hasProperty &&
+			!n.hasAggregateItem &&
 			n.operation == "" &&
 			n.decision == DecisionNone &&
 			!n.hasBinding &&
@@ -297,6 +340,7 @@ func (n Node) IsValid() bool {
 
 	case KindOperation:
 		return !n.hasProperty &&
+			!n.hasAggregateItem &&
 			n.operation != "" &&
 			n.decision.IsAllowedForOperation(n.operation) &&
 			!n.hasBinding &&
@@ -305,6 +349,7 @@ func (n Node) IsValid() bool {
 
 	case KindCalculationOverride:
 		return !n.hasProperty &&
+			!n.hasAggregateItem &&
 			n.operation == "" &&
 			n.decision == DecisionNone &&
 			!n.hasBinding &&
@@ -315,6 +360,7 @@ func (n Node) IsValid() bool {
 
 	case KindScenarioOverride:
 		return !n.hasProperty &&
+			!n.hasAggregateItem &&
 			n.operation == "" &&
 			n.decision == DecisionNone &&
 			!n.hasBinding &&
@@ -328,6 +374,7 @@ func (n Node) IsValid() bool {
 		KindBaseTypeBinding:
 
 		return !n.hasProperty &&
+			!n.hasAggregateItem &&
 			n.operation == "" &&
 			n.decision == DecisionNone &&
 			n.hasBinding &&
@@ -340,12 +387,26 @@ func (n Node) IsValid() bool {
 		KindAmbiguousValue:
 
 		return !n.hasProperty &&
+			!n.hasAggregateItem &&
 			n.operation == "" &&
 			n.decision == DecisionNone &&
 			!n.hasBinding &&
 			!n.hasOverride &&
 			!n.hasScenario &&
 			len(n.children) == 0
+
+	case KindAggregateItem:
+		return !n.hasProperty &&
+			n.operation == "" &&
+			n.decision == DecisionNone &&
+			!n.hasBinding &&
+			!n.hasOverride &&
+			!n.hasScenario &&
+			n.hasAggregateItem &&
+			n.relation.IsValid() &&
+			n.relation.Kind() == address.ObjectRefRelation &&
+			n.relatedEntity.IsValid() &&
+			n.relatedEntity.Kind() == address.ObjectRefEntity
 
 	default:
 		return false

@@ -407,14 +407,9 @@ func (e expressionExtractor) walkAggregate(
 		return invalidExpressionError()
 	}
 
-	if !context.self.IsValid() ||
-		context.self.Kind() !=
-			address.ObjectRefEntity {
-
-		return newBuildError(
-			BuildErrorInvalidTraversal,
-			"aggregate traversal requires an Entity self object",
-		)
+	origin, err := traversalOrigin(context, expression.Source())
+	if err != nil {
+		return err
 	}
 
 	relationType, ok :=
@@ -439,7 +434,7 @@ func (e expressionExtractor) walkAggregate(
 
 	items, err :=
 		e.traversalItems(
-			context.self.ID(),
+			origin.ID(),
 			expression.Source(),
 		)
 
@@ -509,6 +504,58 @@ func (e expressionExtractor) walkAggregate(
 	}
 
 	return nil
+}
+
+func traversalOrigin(
+	context extractionContext,
+	source ast.TraversalSource,
+) (address.ObjectRef, error) {
+	if !source.IsValid() {
+		return address.ObjectRef{}, newBuildError(
+			BuildErrorInvalidTraversal,
+			"aggregate traversal source is invalid",
+		)
+	}
+
+	switch source.Origin() {
+	case ast.TraversalOriginSelf:
+		if !context.self.IsValid() ||
+			context.self.Kind() != address.ObjectRefEntity {
+			return address.ObjectRef{}, newBuildError(
+				BuildErrorInvalidTraversal,
+				"aggregate traversal requires an Entity self object",
+			)
+		}
+		return context.self, nil
+
+	case ast.TraversalOriginAbsoluteEntity:
+		origin, ok := source.AbsoluteOrigin()
+		if !ok || !origin.IsValid() ||
+			origin.Kind() != address.ObjectRefEntity {
+			return address.ObjectRef{}, newBuildError(
+				BuildErrorInvalidTraversal,
+				"aggregate traversal explicit origin must be an Entity object",
+			)
+		}
+		return origin, nil
+
+	case ast.TraversalOriginBoundEntity:
+		if !context.hasBinding ||
+			!context.binding.entity.IsValid() ||
+			context.binding.entity.Kind() != address.ObjectRefEntity {
+			return address.ObjectRef{}, newBuildError(
+				BuildErrorMissingBinding,
+				"aggregate traversal bound origin is used outside aggregate binding",
+			)
+		}
+		return context.binding.entity, nil
+
+	default:
+		return address.ObjectRef{}, newBuildError(
+			BuildErrorInvalidTraversal,
+			"aggregate traversal origin is invalid",
+		)
+	}
 }
 
 func (e expressionExtractor) traversalItems(
