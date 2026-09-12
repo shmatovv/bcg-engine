@@ -39,6 +39,15 @@ type Factor struct {
 	exponent int
 }
 
+// DimensionFactor is the portable, immutable representation of one base
+// dimension exponent. It deliberately exposes value data rather than the
+// internal canonical Factor representation so codecs do not need access to
+// Dimension internals.
+type DimensionFactor struct {
+	ID       ID
+	Exponent int
+}
+
 // Dimension represents the dimensional structure of a quantity.
 //
 // A Dimension is a canonical product of base dimensions raised to integer
@@ -107,6 +116,20 @@ func Dimensionless() Dimension {
 	return Dimension{}
 }
 
+// NewDimension constructs a canonical Dimension from portable factors.
+//
+// Repeated IDs are combined, zero exponents are removed, and the result is
+// sorted exactly like dimensions produced by unit algebra. It panics for an
+// invalid identifier or exponent overflow, matching the construction
+// contract of Base and the arithmetic operations.
+func NewDimension(factors []DimensionFactor) Dimension {
+	internal := make([]Factor, len(factors))
+	for index, factor := range factors {
+		internal[index] = Factor{id: factor.ID, exponent: factor.Exponent}
+	}
+	return newDimension(internal)
+}
+
 // Base returns the base dimension identified by id.
 //
 // Base panics if id is invalid.
@@ -153,6 +176,19 @@ func (d Dimension) IsValid() bool {
 // IsDimensionless reports whether d represents the dimensionless dimension.
 func (d Dimension) IsDimensionless() bool {
 	return len(d.factors) == 0
+}
+
+// Factors returns a defensive portable copy of d's canonical factors.
+// The returned order is canonical lexicographic ID order.
+func (d Dimension) Factors() []DimensionFactor {
+	if len(d.factors) == 0 {
+		return nil
+	}
+	result := make([]DimensionFactor, len(d.factors))
+	for index, factor := range d.factors {
+		result[index] = DimensionFactor{ID: factor.id, Exponent: factor.exponent}
+	}
+	return result
 }
 
 // Equal reports whether d and other represent the same dimension.

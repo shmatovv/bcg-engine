@@ -39,6 +39,20 @@ type UnitFactor struct {
 	exponent int
 }
 
+// SymbolicFactor is the portable, immutable representation of one symbolic
+// unit exponent.
+type SymbolicFactor struct {
+	ID       UnitID
+	Exponent int
+}
+
+// ConversionFactorSpec is the portable, immutable representation of one
+// conversion-space exponent.
+type ConversionFactorSpec struct {
+	ID       ConversionSpaceID
+	Exponent int
+}
+
 // Unit represents a concrete unit of measurement.
 //
 // A Unit consists of:
@@ -177,6 +191,41 @@ func NewUnit(
 	}
 }
 
+// NewComposedUnit constructs a canonical Unit from its complete portable
+// representation. It is intended for data boundaries such as model codecs;
+// ordinary model code should normally use NewUnit and unit algebra.
+//
+// The inputs must already describe a canonical unit: IDs are valid, factors
+// and conversion factors are strictly ordered and non-zero, the dimension is
+// valid, and scale is positive. This deliberately rejects silent repair of
+// malformed serialized units.
+func NewComposedUnit(
+	dimension Dimension,
+	factors []SymbolicFactor,
+	conversionFactors []ConversionFactorSpec,
+	scale rational.Rational,
+) Unit {
+	internalFactors := make([]UnitFactor, len(factors))
+	for index, factor := range factors {
+		internalFactors[index] = UnitFactor{id: factor.ID, exponent: factor.Exponent}
+	}
+	internalConversions := make([]ConversionFactor, len(conversionFactors))
+	for index, factor := range conversionFactors {
+		internalConversions[index] = ConversionFactor{id: factor.ID, exponent: factor.Exponent}
+	}
+	result := Unit{
+		dimension:         dimension,
+		factors:           internalFactors,
+		conversionFactors: internalConversions,
+		scale:             scale,
+		valid:             true,
+	}
+	if !result.IsValid() {
+		panic("unit: invalid composed unit")
+	}
+	return result
+}
+
 // IsValid reports whether id is a valid unit identifier.
 //
 // A valid identifier:
@@ -219,6 +268,32 @@ func (u Unit) Dimension() Dimension {
 // signature.
 func (u Unit) Scale() rational.Rational {
 	return u.scale
+}
+
+// Factors returns a defensive portable copy of the canonical symbolic unit
+// composition.
+func (u Unit) Factors() []SymbolicFactor {
+	if len(u.factors) == 0 {
+		return nil
+	}
+	result := make([]SymbolicFactor, len(u.factors))
+	for index, factor := range u.factors {
+		result[index] = SymbolicFactor{ID: factor.id, Exponent: factor.exponent}
+	}
+	return result
+}
+
+// ConversionFactors returns a defensive portable copy of the canonical
+// conversion-space composition.
+func (u Unit) ConversionFactors() []ConversionFactorSpec {
+	if len(u.conversionFactors) == 0 {
+		return nil
+	}
+	result := make([]ConversionFactorSpec, len(u.conversionFactors))
+	for index, factor := range u.conversionFactors {
+		result[index] = ConversionFactorSpec{ID: factor.id, Exponent: factor.exponent}
+	}
+	return result
 }
 
 // IsDimensionless reports whether u has dimensionless dimensional meaning.
