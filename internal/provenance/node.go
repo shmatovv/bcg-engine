@@ -5,6 +5,7 @@ import (
 	domainscenario "github.com/shmatovv/bcg-engine/internal/domain/scenario"
 	"github.com/shmatovv/bcg-engine/internal/domain/semantic"
 	"github.com/shmatovv/bcg-engine/internal/runtime"
+	"github.com/shmatovv/bcg-engine/internal/types/value"
 )
 
 // Node is one immutable node in an evaluation provenance tree.
@@ -26,6 +27,10 @@ type Node struct {
 	hasProperty bool
 
 	operation string
+	decision  Decision
+
+	resolved    value.Resolved
+	hasResolved bool
 
 	binding    semantic.ValueBinding
 	hasBinding bool
@@ -73,13 +78,27 @@ func NewOperation(
 	operation string,
 	children ...Node,
 ) Node {
+	return NewOperationDecision(operation, DecisionNone, children...)
+}
+
+// NewOperationDecision records a semantic control-flow decision for one
+// actual operation. Children are only paths that were actually evaluated.
+func NewOperationDecision(
+	operation string,
+	decision Decision,
+	children ...Node,
+) Node {
 	if operation == "" {
 		panic("provenance: operation name must not be empty")
+	}
+	if !decision.IsAllowedForOperation(operation) {
+		panic("provenance: operation decision is invalid for operation")
 	}
 
 	return Node{
 		kind:      KindOperation,
 		operation: operation,
+		decision:  decision,
 		children:  cloneChildren(children),
 	}
 }
@@ -183,6 +202,29 @@ func (n Node) Operation() (
 	return n.operation, true
 }
 
+// Decision returns an operation's actual control-flow decision. Non-operation
+// nodes and ordinary strict operations return DecisionNone.
+func (n Node) Decision() Decision { return n.decision }
+
+// WithResolved returns a copy recording the exact state produced at this
+// provenance step. The evaluator attaches it as each Result is created, so
+// Explain never has to replay evaluation.
+func (n Node) WithResolved(resolved value.Resolved) Node {
+	if !n.IsValid() {
+		panic("provenance: cannot attach a result to an invalid node")
+	}
+	if !resolved.IsValid() {
+		panic("provenance: resolved result is invalid")
+	}
+	n.resolved = resolved
+	n.hasResolved = true
+	return n
+}
+
+// Resolved returns the actual result recorded for this step. Nodes manually
+// constructed outside the evaluator may deliberately have no recorded state.
+func (n Node) Resolved() (value.Resolved, bool) { return n.resolved, n.hasResolved }
+
 func (n Node) Binding() (
 	semantic.ValueBinding,
 	bool,
@@ -221,6 +263,9 @@ func (n Node) IsValid() bool {
 	if !n.kind.IsValid() {
 		return false
 	}
+	if n.hasResolved && !n.resolved.IsValid() {
+		return false
+	}
 
 	for _, child := range n.children {
 		if !child.IsValid() {
@@ -236,6 +281,7 @@ func (n Node) IsValid() bool {
 		return n.hasProperty &&
 			n.property.IsValid() &&
 			n.operation == "" &&
+			n.decision == DecisionNone &&
 			!n.hasBinding &&
 			!n.hasOverride &&
 			!n.hasScenario
@@ -243,6 +289,7 @@ func (n Node) IsValid() bool {
 	case KindConstant:
 		return !n.hasProperty &&
 			n.operation == "" &&
+			n.decision == DecisionNone &&
 			!n.hasBinding &&
 			!n.hasOverride &&
 			!n.hasScenario &&
@@ -251,6 +298,7 @@ func (n Node) IsValid() bool {
 	case KindOperation:
 		return !n.hasProperty &&
 			n.operation != "" &&
+			n.decision.IsAllowedForOperation(n.operation) &&
 			!n.hasBinding &&
 			!n.hasOverride &&
 			!n.hasScenario
@@ -258,6 +306,7 @@ func (n Node) IsValid() bool {
 	case KindCalculationOverride:
 		return !n.hasProperty &&
 			n.operation == "" &&
+			n.decision == DecisionNone &&
 			!n.hasBinding &&
 			n.hasOverride &&
 			n.override.IsValid() &&
@@ -267,6 +316,7 @@ func (n Node) IsValid() bool {
 	case KindScenarioOverride:
 		return !n.hasProperty &&
 			n.operation == "" &&
+			n.decision == DecisionNone &&
 			!n.hasBinding &&
 			!n.hasOverride &&
 			n.hasScenario &&
@@ -279,6 +329,7 @@ func (n Node) IsValid() bool {
 
 		return !n.hasProperty &&
 			n.operation == "" &&
+			n.decision == DecisionNone &&
 			n.hasBinding &&
 			n.binding.IsValid() &&
 			!n.hasOverride &&
@@ -290,6 +341,7 @@ func (n Node) IsValid() bool {
 
 		return !n.hasProperty &&
 			n.operation == "" &&
+			n.decision == DecisionNone &&
 			!n.hasBinding &&
 			!n.hasOverride &&
 			!n.hasScenario &&

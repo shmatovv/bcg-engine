@@ -547,12 +547,13 @@ func resultFromOutcome(
 		return Result{}, err
 	}
 
+	resolved := outcome.Value()
 	return newResult(
-		outcome.Value(),
+		resolved,
 		provenance.NewProperty(
 			propertyKind,
 			target,
-			sourceNode,
+			sourceNode.WithResolved(resolved),
 		),
 	), nil
 }

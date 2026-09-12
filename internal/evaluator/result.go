@@ -31,7 +31,7 @@ func newResult(
 
 	return Result{
 		value:      resolved,
-		provenance: provenanceNode,
+		provenance: provenanceNode.WithResolved(resolved),
 	}
 }
 

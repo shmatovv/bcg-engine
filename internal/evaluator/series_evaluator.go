@@ -203,16 +203,19 @@ func seriesResultFromOutcome(target address.PropertyAddress, propertyKind proven
 		return SeriesResult{}, err
 	}
 	return sourceSeriesResult(stored, func(resolved enginevalue.Resolved) (Result, error) {
-		return newResult(resolved, provenance.NewProperty(propertyKind, target, sourceNode)), nil
+		return newResult(
+			resolved,
+			provenance.NewProperty(propertyKind, target, sourceNode.WithResolved(resolved)),
+		), nil
 	})
 }
 
 func seriesUndefinedProvenance(info enginevalue.UndefinedInfo) (provenance.Node, error) {
 	switch info.Kind() {
 	case enginevalue.UndefinedMissingValue:
-		return provenance.NewMissingValue(), nil
+		return provenance.NewMissingValue().WithResolved(enginevalue.Undefined(info)), nil
 	case enginevalue.UndefinedAmbiguousValue:
-		return provenance.NewAmbiguousValue(), nil
+		return provenance.NewAmbiguousValue().WithResolved(enginevalue.Undefined(info)), nil
 	default:
 		return provenance.Node{}, newError(ErrorInvariantViolation, "Series resolver returned unsupported source-less Undefined value", nil)
 	}
@@ -458,7 +461,7 @@ func (s *seriesEvaluationState) evaluateLogical(expression ast.Logical, context 
 			return seriesPartial{}, err
 		}
 		if determined {
-			values[index] = newResult(short, provenance.NewOperation(expression.Operator().String(), sample.Provenance()))
+			values[index] = newResult(short, provenance.NewOperationDecision(expression.Operator().String(), provenance.DecisionShortCircuited, sample.Provenance()))
 			continue
 		}
 		rightDemand[index] = true
@@ -653,22 +656,24 @@ func (s *seriesEvaluationState) evaluateIf(expression ast.If, context expression
 			return seriesPartial{}, err
 		}
 		if condition.Value().IsNull() || condition.Value().IsUndefined() {
-			return newSeriesPartial(newUndefinedSeriesResult(enginevalue.NewUndefinedInfo(enginevalue.UndefinedIndeterminateCondition), provenance.NewOperation("If", condition.Provenance())), nil)
+			return newSeriesPartial(newUndefinedSeriesResult(enginevalue.NewUndefinedInfo(enginevalue.UndefinedIndeterminateCondition), provenance.NewOperationDecision("If", provenance.DecisionIndeterminate, condition.Provenance())), nil)
 		}
 		conditionValue := condition.Value().Value()
 		if conditionValue.Type() != enginevalue.Bool || conditionValue.HasUnit() {
 			return seriesPartial{}, newError(ErrorInvariantViolation, "committed IF condition is not a unitless Bool", nil)
 		}
 		selected := expression.Else()
+		decision := provenance.DecisionElse
 		if conditionValue.Raw().Bool() {
 			selected = expression.Then()
+			decision = provenance.DecisionThen
 		}
 		branch, err := s.evaluateExpression(selected, context, demand)
 		if err != nil {
 			return seriesPartial{}, err
 		}
 		if branch.isUndefined() {
-			return newSeriesPartial(newUndefinedSeriesResult(enginevalue.NewUndefinedInfo(enginevalue.UndefinedDependencyUndefined), provenance.NewOperation("If", condition.Provenance(), branch.result.undefinedProvenance)), nil)
+			return newSeriesPartial(newUndefinedSeriesResult(enginevalue.NewUndefinedInfo(enginevalue.UndefinedDependencyUndefined), provenance.NewOperationDecision("If", decision, condition.Provenance(), branch.result.undefinedProvenance)), nil)
 		}
 		values := make([]Result, len(branch.demand))
 		for index, demanded := range branch.demand {
@@ -679,7 +684,7 @@ func (s *seriesEvaluationState) evaluateIf(expression ast.If, context expression
 			if err != nil {
 				return seriesPartial{}, err
 			}
-			values[index] = newResult(sample.Value(), provenance.NewOperation("If", condition.Provenance(), sample.Provenance()))
+			values[index] = newResult(sample.Value(), provenance.NewOperationDecision("If", decision, condition.Provenance(), sample.Provenance()))
 		}
 		return s.buildExpressionResult(branch, values, expression, context)
 	}
@@ -691,7 +696,7 @@ func (s *seriesEvaluationState) evaluateIf(expression ast.If, context expression
 		return seriesPartial{}, err
 	}
 	if condition.isUndefined() {
-		return newSeriesPartial(newUndefinedSeriesResult(enginevalue.NewUndefinedInfo(enginevalue.UndefinedIndeterminateCondition), provenance.NewOperation("If", condition.result.undefinedProvenance)), nil)
+		return newSeriesPartial(newUndefinedSeriesResult(enginevalue.NewUndefinedInfo(enginevalue.UndefinedIndeterminateCondition), provenance.NewOperationDecision("If", provenance.DecisionIndeterminate, condition.result.undefinedProvenance)), nil)
 	}
 	thenDemand := make([]bool, len(condition.demand))
 	elseDemand := make([]bool, len(condition.demand))
@@ -754,12 +759,14 @@ func (s *seriesEvaluationState) evaluateIf(expression ast.If, context expression
 		}
 		resolved := sample.Value()
 		if resolved.IsNull() || resolved.IsUndefined() {
-			values[index] = newResult(enginevalue.Undefined(enginevalue.NewUndefinedInfo(enginevalue.UndefinedIndeterminateCondition)), provenance.NewOperation("If", sample.Provenance()))
+			values[index] = newResult(enginevalue.Undefined(enginevalue.NewUndefinedInfo(enginevalue.UndefinedIndeterminateCondition)), provenance.NewOperationDecision("If", provenance.DecisionIndeterminate, sample.Provenance()))
 			continue
 		}
 		selected := elseResult
+		decision := provenance.DecisionElse
 		if resolved.Value().Raw().Bool() {
 			selected = thenResult
+			decision = provenance.DecisionThen
 		}
 		var selectedSample Result
 		if selected.isDefined() {
@@ -774,7 +781,7 @@ func (s *seriesEvaluationState) evaluateIf(expression ast.If, context expression
 		if value.IsUndefined() {
 			value = dependencyUndefined()
 		}
-		values[index] = newResult(value, provenance.NewOperation("If", sample.Provenance(), selectedSample.Provenance()))
+		values[index] = newResult(value, provenance.NewOperationDecision("If", decision, sample.Provenance(), selectedSample.Provenance()))
 	}
 	return s.buildExpressionResult(condition, values, expression, context)
 }
@@ -799,9 +806,9 @@ func (s *seriesEvaluationState) evaluateCoalesce(expression ast.Coalesce, contex
 		}
 		switch {
 		case sample.Value().IsUndefined():
-			values[index] = newResult(dependencyUndefined(), provenance.NewOperation("Coalesce", sample.Provenance()))
+			values[index] = newResult(dependencyUndefined(), provenance.NewOperationDecision("Coalesce", provenance.DecisionPrimary, sample.Provenance()))
 		case !sample.Value().IsNull():
-			values[index] = newResult(sample.Value(), provenance.NewOperation("Coalesce", sample.Provenance()))
+			values[index] = newResult(sample.Value(), provenance.NewOperationDecision("Coalesce", provenance.DecisionPrimary, sample.Provenance()))
 		default:
 			fallbackDemand[index] = true
 		}
@@ -841,7 +848,7 @@ func (s *seriesEvaluationState) evaluateCoalesce(expression ast.Coalesce, contex
 		if resolved.IsUndefined() {
 			resolved = dependencyUndefined()
 		}
-		values[index] = newResult(resolved, provenance.NewOperation("Coalesce", primarySample.Provenance(), fallbackSample.Provenance()))
+		values[index] = newResult(resolved, provenance.NewOperationDecision("Coalesce", provenance.DecisionFallback, primarySample.Provenance(), fallbackSample.Provenance()))
 	}
 	return s.buildExpressionResult(primary, values, expression, context)
 }

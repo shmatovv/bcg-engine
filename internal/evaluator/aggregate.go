@@ -183,7 +183,7 @@ func (s *evaluationState) evaluateAggregate(
 				provenance.NewOperation(
 					"AggregateFilter",
 					filterResult.provenance,
-				),
+				).WithResolved(filterResult.value),
 			)
 
 			passes,
@@ -238,7 +238,7 @@ func (s *evaluationState) evaluateAggregate(
 			provenance.NewOperation(
 				"AggregateMap",
 				mapResult.provenance,
-			),
+			).WithResolved(mapResult.value),
 		)
 
 		if mapResult.value.IsNull() ||
@@ -333,7 +333,7 @@ func (s *evaluationState) evaluateRelationApplicability(
 		provenance.NewOperation(
 			"RelationApplicability",
 			result.provenance,
-		),
+		).WithResolved(result.value),
 		indeterminate,
 		nil
 }

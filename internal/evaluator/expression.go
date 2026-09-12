@@ -656,10 +656,11 @@ func (s *evaluationState) evaluateLogical(
 	if determined {
 		return newResult(
 			short,
-			provenance.NewOperation(
+			provenance.NewOperationDecision(
 				expression.
 					Operator().
 					String(),
+				provenance.DecisionShortCircuited,
 				left.provenance,
 			),
 		), nil
@@ -725,8 +726,9 @@ func (s *evaluationState) evaluateIf(
 				enginevalue.
 					UndefinedIndeterminateCondition,
 			),
-			provenance.NewOperation(
+			provenance.NewOperationDecision(
 				"If",
+				provenance.DecisionIndeterminate,
 				condition.provenance,
 			),
 		), nil
@@ -747,17 +749,15 @@ func (s *evaluationState) evaluateIf(
 			)
 	}
 
-	var selected ast.Expression
+	selected := expression.Else()
+	decision := provenance.DecisionElse
 
 	if conditionValue.
 		Raw().
 		Bool() {
 
-		selected =
-			expression.Then()
-	} else {
-		selected =
-			expression.Else()
+		selected = expression.Then()
+		decision = provenance.DecisionThen
 	}
 
 	branch, err :=
@@ -776,8 +776,9 @@ func (s *evaluationState) evaluateIf(
 	}
 	return newResult(
 		normalized,
-		provenance.NewOperation(
+		provenance.NewOperationDecision(
 			"If",
+			decision,
 			condition.provenance,
 			branch.provenance,
 		),
@@ -806,8 +807,9 @@ func (s *evaluationState) evaluateCoalesce(
 	if primary.value.IsUndefined() {
 		return newResult(
 			dependencyUndefined(),
-			provenance.NewOperation(
+			provenance.NewOperationDecision(
 				"Coalesce",
+				provenance.DecisionPrimary,
 				primary.provenance,
 			),
 		), nil
@@ -820,8 +822,9 @@ func (s *evaluationState) evaluateCoalesce(
 		}
 		return newResult(
 			normalized,
-			provenance.NewOperation(
+			provenance.NewOperationDecision(
 				"Coalesce",
+				provenance.DecisionPrimary,
 				primary.provenance,
 			),
 		), nil
@@ -851,8 +854,9 @@ func (s *evaluationState) evaluateCoalesce(
 	}
 	return newResult(
 		resolved,
-		provenance.NewOperation(
+		provenance.NewOperationDecision(
 			"Coalesce",
+			provenance.DecisionFallback,
 			primary.provenance,
 			fallback.provenance,
 		),

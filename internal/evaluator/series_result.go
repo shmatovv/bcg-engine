@@ -84,7 +84,10 @@ func newUndefinedSeriesResult(info value.UndefinedInfo, node provenance.Node) Se
 	if !info.IsValid() || !node.IsValid() {
 		panic("evaluator: invalid undefined Series result")
 	}
-	return SeriesResult{undefined: info, undefinedProvenance: node}
+	return SeriesResult{
+		undefined:           info,
+		undefinedProvenance: node.WithResolved(value.Undefined(info)),
+	}
 }
 
 func (r SeriesResult) IsDefined() bool           { return r.defined }
