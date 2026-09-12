@@ -6,7 +6,6 @@ import (
 	"github.com/shmatovv/bcg-engine/internal/domain/identity"
 	"github.com/shmatovv/bcg-engine/internal/domain/schema"
 	"github.com/shmatovv/bcg-engine/internal/domain/scope"
-	"github.com/shmatovv/bcg-engine/internal/expression/ast"
 )
 
 // EntityTypeSpec describes one EntityType. Trait and PropertyDefinitions are
@@ -367,14 +366,6 @@ func (k ComputationKind) String() string {
 	}
 }
 
-// Expression is an opaque declarative expression. Step 3 intentionally
-// provides no expression constructors; Step 4 will add typed AST builders to
-// this value without exposing internal AST implementations.
-type Expression struct{ value ast.Expression }
-
-// IsValid reports whether e contains an expression.
-func (e Expression) IsValid() bool { return e.value != nil }
-
 // PropertyComputation describes how a PropertyDefinition obtains its value.
 type PropertyComputation struct{ value schema.Computation }
 
@@ -383,9 +374,9 @@ func InputComputation() PropertyComputation {
 	return PropertyComputation{value: schema.InputComputation()}
 }
 
-// DerivedComputation constructs a Derived computation from an Expression.
-// Until Step 4 exposes typed Expression builders, this accepts Expressions
-// obtained from existing committed models and rejects a zero Expression.
+// DerivedComputation constructs a Derived computation from an immutable
+// public Expression. Its value and schema compatibility are checked by
+// Draft.Validate and Draft.Commit.
 func DerivedComputation(expression Expression) (PropertyComputation, error) {
 	if !expression.IsValid() {
 		return PropertyComputation{}, invalidSchemaArgument("derived computation expression is invalid")

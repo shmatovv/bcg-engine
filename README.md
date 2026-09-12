@@ -218,12 +218,76 @@ For a property, zero `Unit` means absent and `DimensionlessUnit()` is explicit.
 There is no built-in business unit catalog. BCG v1 schema objects do not carry
 metadata or scope ordering fields.
 
-Input properties are fully authorable in this step. `Expression` and
-`PropertyComputation` already form the typed derived-property boundary: an
-existing committed derived expression can be retained through an edit, but new
-expression AST construction is deliberately introduced in Step 4. Entity and
-relation instances, value bindings, series bindings, constraints, rules, and
-Scenario authoring are also later steps.
+## Expression authoring
+
+`Expression` is an immutable typed AST value. Builders perform local shape
+checks; `Draft.Validate` and `Draft.Commit` remain authoritative for property
+references, units, value types, aggregate bindings, cycles, and depth.
+
+```go
+quantityRef, err := bcg.SelfProperty(quantityID)
+if err != nil {
+	return err
+}
+priceRef, err := bcg.SelfProperty(priceID)
+if err != nil {
+	return err
+}
+revenueExpr, err := bcg.Multiply(quantityRef, priceRef)
+if err != nil {
+	return err
+}
+revenueComputation, err := bcg.DerivedComputation(revenueExpr)
+if err != nil {
+	return err
+}
+revenue, err := bcg.NewPropertyDefinition(bcg.PropertyDefinitionSpec{
+	ID: revenueID, Owner: productOwner, Name: "revenue",
+	ValueType: bcg.DecimalType, TemporalMode: bcg.TemporalScalar,
+	Computation: revenueComputation,
+})
+```
+
+Constants accept defined `Value`s; BCG v1 has no Null literal expression,
+because Null is a resolution state and is tested with `IsNull`.
+
+`Add`, `Subtract`, `Multiply`, `Divide`, `Negate`, comparisons, `And`, `Or`,
+`Not`, `If`, `IsNull`, and `Coalesce` compose Expressions. `AbsoluteProperty`
+uses a `PropertyAddress`. `BoundProperty` and `BoundContractProperty` take
+`BoundEntity` or `BoundRelation` and are valid only inside aggregate filter or
+map expressions.
+
+Aggregate sources are explicit and typed. For example, a sum over related
+entities uses `SelfTraversal`, a bound contract reference, and a mapped
+aggregate:
+
+```go
+source, err := bcg.SelfTraversal(bcg.TraverseOutgoing, containsRelationTypeID)
+if err != nil {
+	return err
+}
+price, err := bcg.BoundContractProperty(bcg.BoundEntity, priceContractID)
+if err != nil {
+	return err
+}
+total, err := bcg.Aggregate(source, bcg.AggregateSum, price)
+```
+
+`Count` and `FilteredCount` intentionally have no map argument, matching the
+v1 evaluator's rule that Count never evaluates a map. `Aggregate` and
+`FilteredAggregate` support `AggregateSum`, `AggregateAverage`, `AggregateMin`,
+and `AggregateMax`. `SelfTraversal`, `AbsoluteEntityTraversal`, and
+`BoundEntityTraversal` represent the three v1 origins; `TraverseOutgoing`,
+`TraverseIncoming`, and `TraverseBoth` select direction.
+
+Derived expressions are exposed losslessly through
+`PropertyInfo.Schema().Computation().Expression()`, so `Model.Edit()` retains
+them even when unrelated schema is changed. Expressions over 512 nodes may be
+assembled temporarily, but Validate and Commit reject them using the shared v1
+depth limit.
+
+Entity and relation instances, value bindings, series bindings, constraints,
+rules, and Scenario authoring are later steps.
 
 For host-process safety, schema validation and `.bcg` decoding reject ASTs
 deeper than 512 nodes. Scalar and Series evaluation also bound active
