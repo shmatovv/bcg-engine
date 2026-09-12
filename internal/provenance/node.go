@@ -34,18 +34,16 @@ type Node struct {
 	operation string
 	decision  Decision
 
-	resolved    value.Resolved
-	hasResolved bool
+	// Optional payloads are stored separately so common provenance nodes do
+	// not reserve space for every mutually-exclusive binding, override and
+	// Scenario representation. The pointed-to values are copied at
+	// construction and never exposed by reference, preserving immutability.
+	resolved *value.Resolved
+	binding  *semantic.ValueBinding
+	override *runtime.Override
 
-	binding    semantic.ValueBinding
-	hasBinding bool
-
-	override    runtime.Override
-	hasOverride bool
-
-	scenario         domainscenario.Scenario
-	scenarioOverride domainscenario.Override
-	hasScenario      bool
+	scenario         *domainscenario.Scenario
+	scenarioOverride *domainscenario.Override
 
 	children []Node
 }
@@ -141,11 +139,7 @@ func NewCalculationOverride(
 		panic("provenance: calculation override is invalid")
 	}
 
-	return Node{
-		kind:        KindCalculationOverride,
-		override:    override,
-		hasOverride: true,
-	}
+	return Node{kind: KindCalculationOverride, override: &override}
 }
 
 // NewScenarioOverride records the exact immutable Scenario and override that
@@ -172,9 +166,8 @@ func NewScenarioOverride(
 
 	return Node{
 		kind:             KindScenarioOverride,
-		scenario:         scenario,
-		scenarioOverride: override,
-		hasScenario:      true,
+		scenario:         &scenario,
+		scenarioOverride: &override,
 	}
 }
 
@@ -191,11 +184,7 @@ func NewBaseBinding(
 		panic("provenance: base value binding is invalid")
 	}
 
-	return Node{
-		kind:       kind,
-		binding:    binding,
-		hasBinding: true,
-	}
+	return Node{kind: kind, binding: &binding}
 }
 
 func NewMissingValue() Node {
@@ -257,29 +246,40 @@ func (n Node) WithResolved(resolved value.Resolved) Node {
 	if !resolved.IsValid() {
 		panic("provenance: resolved result is invalid")
 	}
-	n.resolved = resolved
-	n.hasResolved = true
+	n.resolved = &resolved
 	return n
 }
 
 // Resolved returns the actual result recorded for this step. Nodes manually
 // constructed outside the evaluator may deliberately have no recorded state.
-func (n Node) Resolved() (value.Resolved, bool) { return n.resolved, n.hasResolved }
+func (n Node) Resolved() (value.Resolved, bool) {
+	if n.resolved == nil {
+		return value.Resolved{}, false
+	}
+
+	return *n.resolved, true
+}
 
 func (n Node) Binding() (
 	semantic.ValueBinding,
 	bool,
 ) {
-	return n.binding,
-		n.hasBinding
+	if n.binding == nil {
+		return semantic.ValueBinding{}, false
+	}
+
+	return *n.binding, true
 }
 
 func (n Node) Override() (
 	runtime.Override,
 	bool,
 ) {
-	return n.override,
-		n.hasOverride
+	if n.override == nil {
+		return runtime.Override{}, false
+	}
+
+	return *n.override, true
 }
 
 // ScenarioOverride returns the exact Scenario and override represented by a
@@ -289,9 +289,11 @@ func (n Node) ScenarioOverride() (
 	domainscenario.Override,
 	bool,
 ) {
-	return n.scenario,
-		n.scenarioOverride,
-		n.hasScenario
+	if n.scenario == nil || n.scenarioOverride == nil {
+		return domainscenario.Scenario{}, domainscenario.Override{}, false
+	}
+
+	return *n.scenario, *n.scenarioOverride, true
 }
 
 func (n Node) Children() []Node {
@@ -304,7 +306,7 @@ func (n Node) IsValid() bool {
 	if !n.kind.IsValid() {
 		return false
 	}
-	if n.hasResolved && !n.resolved.IsValid() {
+	if n.resolved != nil && !n.resolved.IsValid() {
 		return false
 	}
 
@@ -324,18 +326,20 @@ func (n Node) IsValid() bool {
 			!n.hasAggregateItem &&
 			n.operation == "" &&
 			n.decision == DecisionNone &&
-			!n.hasBinding &&
-			!n.hasOverride &&
-			!n.hasScenario
+			n.binding == nil &&
+			n.override == nil &&
+			n.scenario == nil &&
+			n.scenarioOverride == nil
 
 	case KindConstant:
 		return !n.hasProperty &&
 			!n.hasAggregateItem &&
 			n.operation == "" &&
 			n.decision == DecisionNone &&
-			!n.hasBinding &&
-			!n.hasOverride &&
-			!n.hasScenario &&
+			n.binding == nil &&
+			n.override == nil &&
+			n.scenario == nil &&
+			n.scenarioOverride == nil &&
 			len(n.children) == 0
 
 	case KindOperation:
@@ -343,19 +347,21 @@ func (n Node) IsValid() bool {
 			!n.hasAggregateItem &&
 			n.operation != "" &&
 			n.decision.IsAllowedForOperation(n.operation) &&
-			!n.hasBinding &&
-			!n.hasOverride &&
-			!n.hasScenario
+			n.binding == nil &&
+			n.override == nil &&
+			n.scenario == nil &&
+			n.scenarioOverride == nil
 
 	case KindCalculationOverride:
 		return !n.hasProperty &&
 			!n.hasAggregateItem &&
 			n.operation == "" &&
 			n.decision == DecisionNone &&
-			!n.hasBinding &&
-			n.hasOverride &&
+			n.binding == nil &&
+			n.override != nil &&
 			n.override.IsValid() &&
-			!n.hasScenario &&
+			n.scenario == nil &&
+			n.scenarioOverride == nil &&
 			len(n.children) == 0
 
 	case KindScenarioOverride:
@@ -363,9 +369,10 @@ func (n Node) IsValid() bool {
 			!n.hasAggregateItem &&
 			n.operation == "" &&
 			n.decision == DecisionNone &&
-			!n.hasBinding &&
-			!n.hasOverride &&
-			n.hasScenario &&
+			n.binding == nil &&
+			n.override == nil &&
+			n.scenario != nil &&
+			n.scenarioOverride != nil &&
 			n.scenario.IsValid() &&
 			n.scenarioOverride.IsValid() &&
 			len(n.children) == 0
@@ -377,10 +384,11 @@ func (n Node) IsValid() bool {
 			!n.hasAggregateItem &&
 			n.operation == "" &&
 			n.decision == DecisionNone &&
-			n.hasBinding &&
+			n.binding != nil &&
 			n.binding.IsValid() &&
-			!n.hasOverride &&
-			!n.hasScenario &&
+			n.override == nil &&
+			n.scenario == nil &&
+			n.scenarioOverride == nil &&
 			len(n.children) == 0
 
 	case KindMissingValue,
@@ -390,18 +398,20 @@ func (n Node) IsValid() bool {
 			!n.hasAggregateItem &&
 			n.operation == "" &&
 			n.decision == DecisionNone &&
-			!n.hasBinding &&
-			!n.hasOverride &&
-			!n.hasScenario &&
+			n.binding == nil &&
+			n.override == nil &&
+			n.scenario == nil &&
+			n.scenarioOverride == nil &&
 			len(n.children) == 0
 
 	case KindAggregateItem:
 		return !n.hasProperty &&
 			n.operation == "" &&
 			n.decision == DecisionNone &&
-			!n.hasBinding &&
-			!n.hasOverride &&
-			!n.hasScenario &&
+			n.binding == nil &&
+			n.override == nil &&
+			n.scenario == nil &&
+			n.scenarioOverride == nil &&
 			n.hasAggregateItem &&
 			n.relation.IsValid() &&
 			n.relation.Kind() == address.ObjectRefRelation &&

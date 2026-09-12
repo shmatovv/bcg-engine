@@ -669,14 +669,42 @@ func publicContext(t testing.TB) bcg.CalculationContext {
 }
 
 func Example() {
-	artifact, _ := bcg.Unmarshal([]byte(publicArtifact))
+	artifact, err := bcg.Unmarshal([]byte(publicArtifact))
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 	model := artifact.Model()
-	target, _ := bcg.EntityProperty(bcg.MustParseID("00000000-0000-4000-8000-000000000005"), bcg.MustParseID("00000000-0000-4000-8000-000000000004"))
-	at, _ := bcg.ParseDateTime("2026-01-02T03:04:05Z")
-	context, _ := bcg.NewCalculationContextAt(at)
-	result, _ := model.Evaluate(target, context)
-	value, _ := result.Value()
-	amount, _ := value.Decimal()
+	target, err := bcg.EntityProperty(bcg.MustParseID("00000000-0000-4000-8000-000000000005"), bcg.MustParseID("00000000-0000-4000-8000-000000000004"))
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	at, err := bcg.ParseDateTime("2026-01-02T03:04:05Z")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	context, err := bcg.NewCalculationContextAt(at)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	result, err := model.Evaluate(target, context)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	value, ok := result.Value()
+	if !ok {
+		fmt.Println(result.State())
+		return
+	}
+	amount, ok := value.Decimal()
+	if !ok {
+		fmt.Println("expected Decimal")
+		return
+	}
 	fmt.Println(amount.String())
 	// Output: 10
 }

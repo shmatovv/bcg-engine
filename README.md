@@ -5,6 +5,15 @@ models. A committed model is exchanged as a canonical `.bcg` JSON artifact;
 the public package provides evaluation, explanation, dependency impact,
 constraints, rules, and an optional incremental evaluation session.
 
+Module: `github.com/shmatovv/bcg-engine`. Requires Go 1.22 or newer.
+This is a private, proprietary library.
+
+Import the consumer API as:
+
+```go
+import bcg "github.com/shmatovv/bcg-engine"
+```
+
 ```go
 artifact, err := bcg.Unmarshal(data)
 if err != nil {
@@ -40,6 +49,23 @@ case bcg.Undefined:
 Use `model.NewSession(calculation)` for repeated scalar evaluations and
 calculation-override what-if analysis. Defined, Null, and Undefined are normal
 result states; a Go error indicates an invalid call or an engine failure.
+Select an artifact's Scenario with `calculation.WithScenario(scenario)`;
+evaluation validates that it belongs to the model version.
+
+For host-process safety, schema validation and `.bcg` decoding reject ASTs
+deeper than 512 nodes. Scalar and Series evaluation also bound active
+expression/property nesting to 512 frames; a deeper valid dependency chain
+returns an `EngineError` with kind `EvaluationDepthExceeded` instead of
+exhausting the host process stack.
 
 The portable format contract is documented in
 [`docs/bcg-format-v1.md`](docs/bcg-format-v1.md).
+
+Development checks:
+
+```sh
+go build ./...
+go test ./...
+go test -race ./...
+go vet ./...
+```

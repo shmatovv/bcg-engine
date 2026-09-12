@@ -7,18 +7,8 @@ import (
 	"github.com/shmatovv/bcg-engine/internal/domain/identity"
 )
 
-// Edge represents one direct value dependency.
-//
-// Direction follows:
-//
-//	dependency -> dependent
-//
-// Example:
-//
-//	BoardA.length -> BoardA.area
-//
-// From is the value being read.
-// To is the value whose expression reads it.
+// Edge points from the property being read to the property whose expression
+// reads it. Semantic relations alone do not create value dependencies.
 type Edge struct {
 	from address.PropertyAddress
 	to   address.PropertyAddress

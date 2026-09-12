@@ -32,7 +32,7 @@ func (v ModelVersion) ObjectType(
 		}
 
 		entityType, ok := v.EntityType(entity.TypeID())
-		if !ok || !entityType.IsValid() {
+		if !ok || entityType.ID() != entity.TypeID() {
 			return schema.PropertyOwner{}, false
 		}
 
@@ -45,7 +45,7 @@ func (v ModelVersion) ObjectType(
 		}
 
 		relationType, ok := v.RelationType(relation.TypeID())
-		if !ok || !relationType.IsValid() {
+		if !ok || relationType.ID() != relation.TypeID() {
 			return schema.PropertyOwner{}, false
 		}
 

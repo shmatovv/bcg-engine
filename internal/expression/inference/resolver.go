@@ -10,12 +10,7 @@ import (
 // Resolver provides the schema and semantic information required for
 // static expression inference.
 //
-// Resolver intentionally does not prescribe how model data is stored.
-// A future immutable ModelVersion may implement this interface directly
-// or expose an adapter implementing it.
-//
-// Expression inference therefore depends on capabilities rather than on
-// a concrete model container.
+// It supports both committed ModelVersions and draft-validation adapters.
 type Resolver interface {
 	// PropertyDefinition resolves one concrete PropertyDefinition.
 	PropertyDefinition(

@@ -4,6 +4,7 @@ import (
 	"github.com/shmatovv/bcg-engine/internal/domain/address"
 	"github.com/shmatovv/bcg-engine/internal/domain/schema"
 	domaintime "github.com/shmatovv/bcg-engine/internal/domain/time"
+	"github.com/shmatovv/bcg-engine/internal/expression/ast"
 	"github.com/shmatovv/bcg-engine/internal/model"
 	"github.com/shmatovv/bcg-engine/internal/plan"
 	"github.com/shmatovv/bcg-engine/internal/provenance"
@@ -230,6 +231,38 @@ type evaluationState struct {
 	cache propertyResultCache
 
 	visiting map[address.PropertyAddress]struct{}
+
+	// expressionDepth bounds recursive expression/property evaluation. Go's
+	// goroutine stack has a hard upper bound, so unbounded valid dependency
+	// chains must fail as an ordinary EngineError rather than terminating the
+	// process. The same guard also bounds arbitrary AST nesting.
+	expressionDepth int
+}
+
+// maxEvaluationDepth is the maximum active scalar expression depth. It is a
+// deliberately conservative release-safety limit: every property reference
+// nests evaluator frames in addition to its expression frame. Models above
+// this depth remain valid artifacts but evaluation returns
+// ErrorEvaluationDepthExceeded deterministically.
+const maxEvaluationDepth = ast.MaxExpressionDepth
+
+func (s *evaluationState) enterExpression() error {
+	if s.expressionDepth >= maxEvaluationDepth {
+		return newError(
+			ErrorEvaluationDepthExceeded,
+			"scalar evaluation exceeded the maximum supported nested expression depth",
+			nil,
+		)
+	}
+	s.expressionDepth++
+	return nil
+}
+
+func (s *evaluationState) leaveExpression() {
+	s.expressionDepth--
+	if s.expressionDepth < 0 {
+		panic("evaluator: scalar expression depth underflow")
+	}
 }
 
 // propertyResultCache is the narrow runtime hook used by EvaluationSession.
@@ -506,7 +539,7 @@ func (s *evaluationState) resolveStoredValue(
 	propertyKind provenance.Kind,
 ) (Result, error) {
 	resolution, err :=
-		resolvervalue.Resolve(
+		resolvervalue.ResolveValidated(
 			s.version,
 			target,
 			s.context,
@@ -777,7 +810,7 @@ func (s *evaluationState) definitionForTarget(
 			)
 
 		if !exists ||
-			!entityType.IsValid() {
+			entityType.ID() != entity.TypeID() {
 
 			return schema.PropertyDefinition{},
 				newError(
@@ -817,7 +850,7 @@ func (s *evaluationState) definitionForTarget(
 			)
 
 		if !exists ||
-			!relationType.IsValid() {
+			relationType.ID() != relation.TypeID() {
 
 			return schema.PropertyDefinition{},
 				newError(

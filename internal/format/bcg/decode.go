@@ -35,9 +35,8 @@ import (
 )
 
 const (
-	maxDocumentBytes   = 64 << 20
-	maxJSONDepth       = 2048
-	maxExpressionDepth = 512
+	maxDocumentBytes = 64 << 20
+	maxJSONDepth     = 2048
 )
 
 func readDocument(reader io.Reader) ([]byte, error) {
@@ -109,7 +108,7 @@ func checkEnvelope(data []byte) error {
 		return wireError("engineCompatibility", "is required")
 	}
 	if *envelope.EngineCompatibility != EngineCompatibilityV1 {
-		return fmt.Errorf("%w: got %q, supported %q", ErrUnsupportedEngineCompat, *envelope.EngineCompatibility, EngineCompatibilityV1)
+		return fmt.Errorf("%w: got %q, supported %q", ErrUnsupportedEngineCompatibility, *envelope.EngineCompatibility, EngineCompatibilityV1)
 	}
 	return nil
 }
@@ -211,7 +210,7 @@ func requireDocumentEnvelope(document wireDocument) error {
 		return fmt.Errorf("%w: got %d, supported %d", ErrUnsupportedFormatVersion, document.FormatVersion, FormatVersion)
 	}
 	if document.EngineCompatibility != EngineCompatibilityV1 {
-		return fmt.Errorf("%w: got %q, supported %q", ErrUnsupportedEngineCompat, document.EngineCompatibility, EngineCompatibilityV1)
+		return fmt.Errorf("%w: got %q, supported %q", ErrUnsupportedEngineCompatibility, document.EngineCompatibility, EngineCompatibilityV1)
 	}
 	return nil
 }
@@ -633,7 +632,7 @@ func (item wireComputation) toDomain(path string, depth int) (schema.Computation
 		if item.Expression == nil {
 			return schema.Computation{}, wireError(path+".expression", "is required for derived computation")
 		}
-		expression, err := item.Expression.toDomain(path+".expression", depth+1)
+		expression, err := item.Expression.toDomain(path+".expression", depth)
 		if err != nil {
 			return schema.Computation{}, err
 		}
@@ -690,7 +689,7 @@ func (item wireRelation) toDomain(path string, depth int) (semantic.Relation, er
 	if item.Applicability == nil {
 		return semantic.NewRelation(id, typeID, from, to, nil, false), nil
 	}
-	expression, err := item.Applicability.toDomain(path+".applicability", depth+1)
+	expression, err := item.Applicability.toDomain(path+".applicability", depth)
 	if err != nil {
 		return semantic.Relation{}, err
 	}
@@ -1030,7 +1029,7 @@ func (item wireConstraint) toDomain(path string, depth int) (constraint.Constrai
 	if err != nil {
 		return constraint.Constraint{}, err
 	}
-	assertion, err := item.Assertion.toDomain(path+".assertion", depth+1)
+	assertion, err := item.Assertion.toDomain(path+".assertion", depth)
 	if err != nil {
 		return constraint.Constraint{}, err
 	}
@@ -1041,7 +1040,7 @@ func (item wireConstraint) toDomain(path string, depth int) (constraint.Constrai
 	var applicability ast.Expression
 	hasApplicability := item.Applicability != nil
 	if hasApplicability {
-		applicability, err = item.Applicability.toDomain(path+".applicability", depth+1)
+		applicability, err = item.Applicability.toDomain(path+".applicability", depth)
 		if err != nil {
 			return constraint.Constraint{}, err
 		}
@@ -1057,7 +1056,7 @@ func (item wireRule) toDomain(path string, depth int) (rule.Rule, error) {
 	if err != nil {
 		return rule.Rule{}, err
 	}
-	condition, err := item.Condition.toDomain(path+".condition", depth+1)
+	condition, err := item.Condition.toDomain(path+".condition", depth)
 	if err != nil {
 		return rule.Rule{}, err
 	}
@@ -1115,8 +1114,11 @@ func (item wireOverride) toDomain(path string) (scenario.Override, error) {
 }
 
 func (item wireExpression) toDomain(path string, depth int) (ast.Expression, error) {
-	if depth > maxExpressionDepth {
-		return nil, wireError(path, fmt.Sprintf("expression nesting exceeds %d", maxExpressionDepth))
+	// depth is zero-based while ast.Depth counts nodes. Rejecting at the
+	// maximum keeps the decoder's accepted tree height exactly aligned with
+	// the shared AST/model-validation limit.
+	if depth >= ast.MaxExpressionDepth {
+		return nil, wireError(path, fmt.Sprintf("expression nesting exceeds %d", ast.MaxExpressionDepth))
 	}
 	switch item.Kind {
 	case "constant":

@@ -65,8 +65,10 @@ type Node struct {
 	target address.PropertyAddress
 	kind   NodeKind
 
-	outcome    resolvervalue.Outcome
-	hasOutcome bool
+	// outcome is allocated only for scalar replacement nodes. Keeping it
+	// optional is significant for large plans: ordinary Input and Derived
+	// nodes never carry a resolved override value or provenance.
+	outcome *resolvervalue.Outcome
 
 	// Series override values are resolved by the Series evaluator because a
 	// scalar Outcome cannot represent a whole Series. The boolean still lets
@@ -125,10 +127,9 @@ func newOverrideNode(
 	}
 
 	return Node{
-		target:     target,
-		kind:       kind,
-		outcome:    outcome,
-		hasOutcome: true,
+		target:  target,
+		kind:    kind,
+		outcome: &outcome,
 	}
 }
 
@@ -147,8 +148,11 @@ func (n Node) Outcome() (
 	resolvervalue.Outcome,
 	bool,
 ) {
-	return n.outcome,
-		n.hasOutcome
+	if n.outcome == nil {
+		return resolvervalue.Outcome{}, false
+	}
+
+	return *n.outcome, true
 }
 
 // CutsDependencies reports whether this node replaces the property's ordinary
@@ -169,13 +173,12 @@ func (n Node) IsValid() bool {
 	case NodeInput,
 		NodeDerivedExpression:
 
-		return !n.hasOutcome &&
-			!n.outcome.IsValid()
+		return n.outcome == nil && !n.hasSeriesOutcome
 
 	case NodeCalculationOverride,
 		NodeScenarioOverride:
-		return (n.hasOutcome && n.outcome.IsValid() && !n.hasSeriesOutcome) ||
-			(!n.hasOutcome && !n.outcome.IsValid() && n.hasSeriesOutcome)
+		return (n.outcome != nil && n.outcome.IsValid() && !n.hasSeriesOutcome) ||
+			(n.outcome == nil && n.hasSeriesOutcome)
 
 	default:
 		return false
@@ -272,28 +275,9 @@ func newPlan(
 		panic("plan: roots must not be empty")
 	}
 
-	copiedRoots := append(
-		[]address.PropertyAddress(nil),
-		roots...,
-	)
-
-	copiedEdges := append(
-		[]Edge(nil),
-		edges...,
-	)
-
-	copiedOrder := append(
-		[]address.PropertyAddress(nil),
-		order...,
-	)
-
-	copiedNodes := make(
-		map[address.PropertyAddress]Node,
-		len(nodes),
-	)
-
 	incoming := make(
 		map[address.PropertyAddress][]address.PropertyAddress,
+		len(nodes),
 	)
 
 	for target, node := range nodes {
@@ -302,10 +286,9 @@ func newPlan(
 			panic("plan: invalid node map")
 		}
 
-		copiedNodes[target] = node
 	}
 
-	for _, edge := range copiedEdges {
+	for _, edge := range edges {
 		if !edge.IsValid() {
 			panic("plan: invalid edge")
 		}
@@ -322,13 +305,18 @@ func newPlan(
 		)
 	}
 
+	// newPlan is private and called only by BuildWithDependencyGraph. The
+	// builder hands over collections that it owns exclusively and never
+	// touches again, so retaining them avoids transient full-plan copies for
+	// large immutable environments. Public Plan accessors remain defensive.
+
 	return Plan{
 		modelVersionID: modelVersionID,
 		context:        context,
-		roots:          copiedRoots,
-		nodes:          copiedNodes,
-		edges:          copiedEdges,
-		order:          copiedOrder,
+		roots:          roots,
+		nodes:          nodes,
+		edges:          edges,
+		order:          order,
 		incoming:       incoming,
 	}
 }

@@ -14,9 +14,9 @@
 *.out
 coverage.*
 *.coverprofile
-cpu.prof
-mem.prof
 *.prof
+*.pprof
+/bench*.txt
 
 # Local Go workspace
 go.work
@@ -57,6 +57,7 @@ go.work.sum
 .cache/
 *.tmp
 *.temp
+*.bak
 
 # Logs
 *.log

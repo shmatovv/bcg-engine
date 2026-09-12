@@ -17,8 +17,9 @@ unknown enum values, non-canonical UUIDs and primitive encodings, malformed
 typed values, trailing documents, invalid UTF-8, and a UTF-8 BOM. Future wire
 schemas use a new `formatVersion` decoder rather than relying on ignored
 fields. Required fields are explicit (including `null` for an absent optional
-reference); documents are bounded to 64 MiB and AST/JSON nesting is bounded to
-safe v1 limits.
+reference). Documents are bounded to 64 MiB, JSON nesting to 2048 levels,
+and each expression tree to 512 nodes along its deepest path. Model, property,
+Rule, Constraint, and Relation containers do not count toward AST depth.
 
 All unordered model collections are encoded in canonical UUID order. Scope
 selectors, bindings, Scenario overrides, and Rule metadata are also

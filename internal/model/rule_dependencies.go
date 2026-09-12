@@ -45,9 +45,7 @@ func (v ModelVersion) RuleDependencies(ruleID identity.UUID) (RuleDependencies, 
 }
 
 // RuleIDsDependingOn returns an owned deterministic list of Rules whose
-// condition structurally reads propertyAddress. It is the immutable
-// computational-dependency foundation for future Rule Impact; the existing
-// property-only Impact API deliberately remains unchanged.
+// condition structurally reads propertyAddress.
 func (v ModelVersion) RuleIDsDependingOn(propertyAddress address.PropertyAddress) []identity.UUID {
 	if !propertyAddress.IsValid() {
 		return nil

@@ -108,7 +108,8 @@ func BuildWithDependencyGraph(
 			)
 	}
 
-	if err := resolvervalue.ValidateContext(version, context); err != nil {
+	overrideLayers, err := resolvervalue.NewOverrideLayers(version, context)
+	if err != nil {
 		return Plan{},
 			newError(
 				ErrorInvalidCalculationContext,
@@ -128,21 +129,38 @@ func BuildWithDependencyGraph(
 			err
 	}
 
+	// builder owns every collection below until ownership is transferred to the
+	// immutable Plan at the end of this function. The graph bounds all of
+	// their cardinalities, so reserving here avoids repeated map/slice growth
+	// when a Session prepares a large effective environment.
+	vertexCapacity := baseGraph.Len()
+	edgeCapacity := baseGraph.EdgeLen()
+
 	builder := builder{
-		version: version,
-		context: context,
-		base:    baseGraph,
+		version:   version,
+		context:   context,
+		base:      baseGraph,
+		overrides: overrideLayers,
 
 		nodes: make(
 			map[address.PropertyAddress]Node,
+			vertexCapacity,
 		),
 
 		state: make(
 			map[address.PropertyAddress]visitState,
+			vertexCapacity,
 		),
 
 		edges: make(
 			map[edgeKey]struct{},
+			edgeCapacity,
+		),
+
+		order: make(
+			[]address.PropertyAddress,
+			0,
+			vertexCapacity,
 		),
 	}
 
@@ -203,6 +221,8 @@ type builder struct {
 
 	base dependency.Graph
 
+	overrides resolvervalue.OverrideLayers
+
 	nodes map[address.PropertyAddress]Node
 	state map[address.PropertyAddress]visitState
 	edges map[edgeKey]struct{}
@@ -211,67 +231,79 @@ type builder struct {
 }
 
 func (b *builder) visit(
-	target address.PropertyAddress,
+	root address.PropertyAddress,
 ) error {
-	switch b.state[target] {
-	case visitDone:
-		return nil
-
-	case visitActive:
-		return newError(
-			ErrorCycle,
-			"cycle encountered while building Effective Evaluation Plan",
-			nil,
-		)
+	// Effective-plan construction can traverse a concrete property chain much
+	// deeper than any single AST. Keep the DFS explicitly on the heap rather
+	// than on the goroutine stack: a valid, deeply chained ModelVersion must
+	// produce a deterministic plan (and later a controlled evaluator depth
+	// error when applicable), never terminate the host process.
+	type frame struct {
+		target       address.PropertyAddress
+		dependencies []address.PropertyAddress
+		next         int
 	}
 
-	b.state[target] =
-		visitActive
+	push := func(target address.PropertyAddress) (frame, bool, error) {
+		switch b.state[target] {
+		case visitDone:
+			return frame{}, false, nil
 
-	node,
-		cutDependencies,
-		err :=
-		b.resolveNode(
-			target,
-		)
+		case visitActive:
+			return frame{}, false, newError(
+				ErrorCycle,
+				"cycle encountered while building Effective Evaluation Plan",
+				nil,
+			)
+		}
 
-	if err != nil {
+		b.state[target] = visitActive
+		node, cutDependencies, err := b.resolveNode(target)
+		if err != nil {
+			return frame{}, false, err
+		}
+		b.nodes[target] = node
+
+		result := frame{target: target}
+		if !cutDependencies {
+			result.dependencies = b.base.DependenciesOf(target)
+		}
+		return result, true, nil
+	}
+
+	initial, pushed, err := push(root)
+	if err != nil || !pushed {
 		return err
 	}
+	stack := []frame{initial}
 
-	b.nodes[target] =
-		node
+	for len(stack) > 0 {
+		last := len(stack) - 1
+		current := &stack[last]
+		if current.next < len(current.dependencies) {
+			dependencyAddress := current.dependencies[current.next]
+			current.next++
 
-	if !cutDependencies {
-		for _, dependencyAddress := range b.base.
-			DependenciesOf(
-				target,
-			) {
-
-			if err :=
-				b.visit(
-					dependencyAddress,
-				); err != nil {
-
+			next, pushed, err := push(dependencyAddress)
+			if err != nil {
 				return err
 			}
-
-			b.edges[edgeKey{
-				from: dependencyAddress,
-				to:   target,
-			}] = struct{}{}
+			// The base graph owns the direct relation; whether the child was
+			// already complete or has just been scheduled does not change this
+			// effective edge. An active child was rejected by push above.
+			b.edges[edgeKey{from: dependencyAddress, to: current.target}] = struct{}{}
+			if pushed {
+				stack = append(stack, next)
+				continue
+			}
+			continue
 		}
+
+		b.state[current.target] = visitDone
+		// Post-order traversal gives deterministic dependency-first order.
+		b.order = append(b.order, current.target)
+		stack = stack[:last]
 	}
-
-	b.state[target] =
-		visitDone
-
-	// Post-order traversal gives deterministic dependency-first static order.
-	b.order =
-		append(
-			b.order,
-			target,
-		)
 
 	return nil
 }
@@ -297,59 +329,27 @@ func (b *builder) resolveNode(
 		return b.resolveSeriesNode(target, definition)
 	}
 
-	calculationOutcome,
-		calculationFound,
-		err :=
-		resolvervalue.
-			ResolveCalculationOverride(
-				b.version,
-				target,
-				b.context,
-			)
-
+	overrideOutcome, overrideFound, err := b.overrides.ResolveScalar(target, definition)
 	if err != nil {
 		return Node{},
 			false,
 			newError(
 				ErrorOverrideResolution,
-				"failed to resolve Calculation override while building plan",
+				"failed to resolve effective override while building plan",
 				err,
 			)
 	}
 
-	if calculationFound {
+	if overrideFound {
+		overrideKind := NodeScenarioOverride
+		if _, calculationOverride := b.context.Override(target); calculationOverride {
+			overrideKind = NodeCalculationOverride
+		}
+
 		return newOverrideNode(
 			target,
-			NodeCalculationOverride,
-			calculationOutcome,
-		), true, nil
-	}
-
-	scenarioOutcome,
-		scenarioFound,
-		err :=
-		resolvervalue.
-			ResolveScenarioOverride(
-				b.version,
-				target,
-				b.context,
-			)
-
-	if err != nil {
-		return Node{},
-			false,
-			newError(
-				ErrorOverrideResolution,
-				"failed to resolve Scenario override while building plan",
-				err,
-			)
-	}
-
-	if scenarioFound {
-		return newOverrideNode(
-			target,
-			NodeScenarioOverride,
-			scenarioOutcome,
+			overrideKind,
+			overrideOutcome,
 		), true, nil
 	}
 
@@ -384,26 +384,21 @@ func (b *builder) resolveSeriesNode(
 	target address.PropertyAddress,
 	definition schema.PropertyDefinition,
 ) (Node, bool, error) {
-	calculation, calculationFound, err := resolvervalue.ResolveSeriesCalculationOverride(b.version, target, b.context)
+	override, overrideFound, err := b.overrides.ResolveSeries(target, definition)
 	if err != nil {
-		return Node{}, false, newError(ErrorOverrideResolution, "failed to resolve Series calculation override while building plan", err)
+		return Node{}, false, newError(ErrorOverrideResolution, "failed to resolve effective Series override while building plan", err)
 	}
-	if calculationFound {
-		if !calculation.IsValid() {
-			return Node{}, false, newError(ErrorInvariantViolation, "Series calculation override outcome is invalid", nil)
+	if overrideFound {
+		if !override.IsValid() {
+			return Node{}, false, newError(ErrorInvariantViolation, "effective Series override outcome is invalid", nil)
 		}
-		return newSeriesOverrideNode(target, NodeCalculationOverride), true, nil
-	}
 
-	scenario, scenarioFound, err := resolvervalue.ResolveSeriesScenarioOverride(b.version, target, b.context)
-	if err != nil {
-		return Node{}, false, newError(ErrorOverrideResolution, "failed to resolve Series Scenario override while building plan", err)
-	}
-	if scenarioFound {
-		if !scenario.IsValid() {
-			return Node{}, false, newError(ErrorInvariantViolation, "Series Scenario override outcome is invalid", nil)
+		overrideKind := NodeScenarioOverride
+		if _, calculationOverride := b.context.Override(target); calculationOverride {
+			overrideKind = NodeCalculationOverride
 		}
-		return newSeriesOverrideNode(target, NodeScenarioOverride), true, nil
+
+		return newSeriesOverrideNode(target, overrideKind), true, nil
 	}
 
 	switch definition.Computation().Kind() {

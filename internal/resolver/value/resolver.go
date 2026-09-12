@@ -55,14 +55,40 @@ func Resolve(
 			)
 	}
 
-	if err :=
-		ValidateContext(
-			version,
-			context,
-		); err != nil {
+	if err := ValidateContext(version, context); err != nil {
+		return Resolution{}, err
+	}
 
+	return ResolveValidated(version, target, context)
+}
+
+// ResolveValidated resolves an Input property after the caller has already
+// validated this exact committed ModelVersion and CalculationContext with
+// ValidateContext. It retains all concrete target and resolution checks but
+// intentionally avoids repeatedly validating every override while evaluating
+// a large, single effective plan.
+//
+// It is an internal execution API. Callers handling arbitrary runtime input
+// must use Resolve instead.
+func ResolveValidated(
+	version model.ModelVersion,
+	target address.PropertyAddress,
+	context runtime.CalculationContext,
+) (Resolution, error) {
+	if !version.IsCommitted() {
 		return Resolution{},
-			err
+			newError(
+				ErrorInvalidModelVersion,
+				"value resolution requires a committed ModelVersion",
+			)
+	}
+
+	if !target.IsValid() {
+		return Resolution{},
+			newError(
+				ErrorInvalidPropertyAddress,
+				"target property address is invalid",
+			)
 	}
 
 	owner, err :=
@@ -341,7 +367,7 @@ func resolveObjectOwner(
 			)
 
 		if !ok ||
-			!entityType.IsValid() {
+			entityType.ID() != entity.TypeID() {
 
 			return schema.PropertyOwner{},
 				newError(
@@ -376,7 +402,7 @@ func resolveObjectOwner(
 			)
 
 		if !ok ||
-			!relationType.IsValid() {
+			relationType.ID() != relation.TypeID() {
 
 			return schema.PropertyOwner{},
 				newError(

@@ -33,12 +33,42 @@ func (c extractionContext) withBinding(
 
 type expressionExtractor struct {
 	source Source
+
+	// The Builder shares these caches across all expressions in one graph
+	// construction. Standalone extraction lazily creates its own bounded cache.
+	entityTypes   map[identity.UUID]schema.EntityType
+	relationTypes map[identity.UUID]schema.RelationType
+	objectOwners  map[address.ObjectRef]schema.PropertyOwner
 }
 
 func (e expressionExtractor) extract(
 	expression ast.Expression,
 	context extractionContext,
 ) ([]address.PropertyAddress, error) {
+	if e.entityTypes == nil {
+		e.entityTypes = make(map[identity.UUID]schema.EntityType)
+	}
+	if e.relationTypes == nil {
+		e.relationTypes = make(map[identity.UUID]schema.RelationType)
+	}
+	if e.objectOwners == nil {
+		e.objectOwners = make(map[address.ObjectRef]schema.PropertyOwner)
+	}
+
+	depth, valid := ast.Depth(expression)
+	if !valid {
+		return nil, newBuildError(
+			BuildErrorInvalidExpression,
+			"expression is structurally invalid",
+		)
+	}
+	if depth > ast.MaxExpressionDepth {
+		return nil, newBuildError(
+			BuildErrorInvalidExpression,
+			"expression nesting exceeds the maximum supported depth",
+		)
+	}
+
 	dependencies := make(
 		map[address.PropertyAddress]struct{},
 	)
@@ -412,19 +442,8 @@ func (e expressionExtractor) walkAggregate(
 		return err
 	}
 
-	relationType, ok :=
-		e.source.RelationType(
-			expression.
-				Source().
-				RelationTypeID(),
-		)
-
-	if !ok ||
-		!relationType.IsValid() ||
-		relationType.ID() !=
-			expression.
-				Source().
-				RelationTypeID() {
+	_, ok := e.relationType(expression.Source().RelationTypeID())
+	if !ok {
 
 		return newBuildError(
 			BuildErrorInvalidTraversal,
@@ -748,6 +767,9 @@ func (e expressionExtractor) objectOwner(
 		return schema.PropertyOwner{},
 			invalidReferenceError()
 	}
+	if owner, exists := e.objectOwners[object]; exists {
+		return owner, nil
+	}
 
 	switch object.Kind() {
 	case address.ObjectRefEntity:
@@ -768,15 +790,8 @@ func (e expressionExtractor) objectOwner(
 				)
 		}
 
-		entityType, ok :=
-			e.source.EntityType(
-				entity.TypeID(),
-			)
-
-		if !ok ||
-			!entityType.IsValid() ||
-			entityType.ID() !=
-				entity.TypeID() {
+		entityType, ok := e.entityType(entity.TypeID())
+		if !ok {
 
 			return schema.PropertyOwner{},
 				newBuildError(
@@ -785,9 +800,9 @@ func (e expressionExtractor) objectOwner(
 				)
 		}
 
-		return schema.EntityTypeOwner(
-			entityType.ID(),
-		), nil
+		owner := schema.EntityTypeOwner(entityType.ID())
+		e.objectOwners[object] = owner
+		return owner, nil
 
 	case address.ObjectRefRelation:
 		relation, ok :=
@@ -807,15 +822,8 @@ func (e expressionExtractor) objectOwner(
 				)
 		}
 
-		relationType, ok :=
-			e.source.RelationType(
-				relation.TypeID(),
-			)
-
-		if !ok ||
-			!relationType.IsValid() ||
-			relationType.ID() !=
-				relation.TypeID() {
+		relationType, ok := e.relationType(relation.TypeID())
+		if !ok {
 
 			return schema.PropertyOwner{},
 				newBuildError(
@@ -824,14 +832,38 @@ func (e expressionExtractor) objectOwner(
 				)
 		}
 
-		return schema.RelationTypeOwner(
-			relationType.ID(),
-		), nil
+		owner := schema.RelationTypeOwner(relationType.ID())
+		e.objectOwners[object] = owner
+		return owner, nil
 
 	default:
 		return schema.PropertyOwner{},
 			invalidReferenceError()
 	}
+}
+
+func (e expressionExtractor) entityType(id identity.UUID) (schema.EntityType, bool) {
+	if result, exists := e.entityTypes[id]; exists {
+		return result, true
+	}
+	result, exists := e.source.EntityType(id)
+	if !exists || !result.IsValid() || result.ID() != id {
+		return schema.EntityType{}, false
+	}
+	e.entityTypes[id] = result
+	return result, true
+}
+
+func (e expressionExtractor) relationType(id identity.UUID) (schema.RelationType, bool) {
+	if result, exists := e.relationTypes[id]; exists {
+		return result, true
+	}
+	result, exists := e.source.RelationType(id)
+	if !exists || !result.IsValid() || result.ID() != id {
+		return schema.RelationType{}, false
+	}
+	e.relationTypes[id] = result
+	return result, true
 }
 
 func invalidExpressionError() error {

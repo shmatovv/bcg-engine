@@ -116,8 +116,7 @@ func NewCalculationContextAt(at DateTime) (CalculationContext, error) {
 }
 
 // NewCalculationContextPeriod creates a half-open [from,to) calculation context.
-// Scalar Evaluate retains the core's At-only contract; Period remains available
-// to APIs that support it now or in later facade revisions.
+// The v1 facade's evaluation methods require At and reject Period contexts.
 func NewCalculationContextPeriod(from, to DateTime) (CalculationContext, error) {
 	if !from.IsValid() || !to.IsValid() || from.value.Cmp(to.value) >= 0 {
 		return CalculationContext{}, fmt.Errorf("%w: calculation period must satisfy valid from < to", ErrInvalidArgument)

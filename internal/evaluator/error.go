@@ -26,6 +26,7 @@ const (
 	ErrorPlanBuild
 	ErrorInvalidEvaluationPlan
 	ErrorEvaluationCycle
+	ErrorEvaluationDepthExceeded
 	ErrorInvariantViolation
 )
 
@@ -46,6 +47,7 @@ func (k ErrorKind) IsValid() bool {
 		ErrorPlanBuild,
 		ErrorInvalidEvaluationPlan,
 		ErrorEvaluationCycle,
+		ErrorEvaluationDepthExceeded,
 		ErrorInvariantViolation:
 
 		return true
@@ -100,6 +102,9 @@ func (k ErrorKind) String() string {
 
 	case ErrorEvaluationCycle:
 		return "EvaluationCycle"
+
+	case ErrorEvaluationDepthExceeded:
+		return "EvaluationDepthExceeded"
 
 	case ErrorInvariantViolation:
 		return "InvariantViolation"

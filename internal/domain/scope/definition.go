@@ -10,15 +10,13 @@ import (
 // Definition declares one independent scope dimension used during value
 // resolution.
 //
-// Core v1 currently models the scope domain by ValueType. A richer finite or
-// constrained domain can be added later without changing Selector identity.
+// ValueType determines the accepted selector values.
 type Definition struct {
 	id        identity.UUID
 	name      string
 	valueType value.Type
 }
 
-// NewDefinition constructs a scope Definition.
 func NewDefinition(
 	id identity.UUID,
 	name string,

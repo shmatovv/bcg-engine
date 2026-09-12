@@ -153,6 +153,11 @@ func (s *evaluationState) evaluateExpression(
 	expression ast.Expression,
 	context expressionContext,
 ) (Result, error) {
+	if err := s.enterExpression(); err != nil {
+		return Result{}, err
+	}
+	defer s.leaveExpression()
+
 	if expression == nil {
 		return Result{},
 			newError(

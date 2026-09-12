@@ -25,19 +25,14 @@ const (
 )
 
 var (
-	ErrMalformedDocument        = errors.New("bcg: malformed document")
-	ErrUnsupportedFormatVersion = errors.New("bcg: unsupported format version")
-	ErrUnsupportedEngineCompat  = errors.New("bcg: unsupported engine compatibility")
-	ErrWireSemantic             = errors.New("bcg: wire semantic error")
-	ErrModelValidation          = errors.New("bcg: model validation failed")
-	ErrScenarioValidation       = errors.New("bcg: scenario validation failed")
-	ErrArtifactInvalid          = errors.New("bcg: invalid artifact")
+	ErrMalformedDocument              = errors.New("bcg: malformed document")
+	ErrUnsupportedFormatVersion       = errors.New("bcg: unsupported format version")
+	ErrUnsupportedEngineCompatibility = errors.New("bcg: unsupported engine compatibility")
+	ErrWireSemantic                   = errors.New("bcg: wire semantic error")
+	ErrModelValidation                = errors.New("bcg: model validation failed")
+	ErrScenarioValidation             = errors.New("bcg: scenario validation failed")
+	ErrArtifactInvalid                = errors.New("bcg: invalid artifact")
 )
-
-// ErrUnsupportedEngineCompatibility is the descriptive compatibility-error
-// name. ErrUnsupportedEngineCompat remains the compact spelling used by the
-// initial internal codec implementation.
-var ErrUnsupportedEngineCompatibility = ErrUnsupportedEngineCompat
 
 // Artifact is one committed immutable ModelVersion and its optional Scenario
 // overlays. ModelName belongs to the long-lived Model identity rather than

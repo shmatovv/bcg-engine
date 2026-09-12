@@ -68,6 +68,50 @@ func TestDecimalOwnership(t *testing.T) {
 	}
 }
 
+// TestExactArithmeticMatchesBigRat uses math/big.Rat as an independent
+// rational oracle. It deliberately covers only exact operations: division is
+// governed by the Engine's explicit rounding policy and has dedicated tie and
+// sign tests above.
+func TestExactArithmeticMatchesBigRat(t *testing.T) {
+	state := uint64(0x9e3779b97f4a7c15)
+	next := func() int64 {
+		state = state*6364136223846793005 + 1442695040888963407
+		return int64(state >> 1)
+	}
+
+	for index := 0; index < 1_000; index++ {
+		left := New(big.NewInt(next()%2_000_000_001-1_000_000_000), uint64(index%19))
+		right := New(big.NewInt(next()%2_000_000_001-1_000_000_000), uint64((index*7)%19))
+
+		leftRat := decimalRat(left)
+		rightRat := decimalRat(right)
+
+		assertDecimalRatEqual(t, "add", left.Add(right), new(big.Rat).Add(leftRat, rightRat))
+		assertDecimalRatEqual(t, "sub", left.Sub(right), new(big.Rat).Sub(leftRat, rightRat))
+
+		product, err := left.Mul(right)
+		if err != nil {
+			t.Fatalf("exact product %d: %v", index, err)
+		}
+		assertDecimalRatEqual(t, "mul", product, new(big.Rat).Mul(leftRat, rightRat))
+		if sign := left.Cmp(right); sign != leftRat.Cmp(rightRat) {
+			t.Fatalf("comparison %d: got %d, want %d", index, sign, leftRat.Cmp(rightRat))
+		}
+	}
+}
+
+func decimalRat(value Decimal) *big.Rat {
+	denominator := new(big.Int).Exp(big.NewInt(10), new(big.Int).SetUint64(value.Scale()), nil)
+	return new(big.Rat).SetFrac(value.Coefficient(), denominator)
+}
+
+func assertDecimalRatEqual(t *testing.T, operation string, got Decimal, want *big.Rat) {
+	t.Helper()
+	if decimalRat(got).Cmp(want) != 0 {
+		t.Fatalf("%s: got %s, want %s", operation, got, want)
+	}
+}
+
 func FuzzParseRoundTrip(f *testing.F) {
 	for _, s := range []string{"0", "-0.00", "-2.5", "123456789012345678901234567890.12345", "+1.00", "bad"} {
 		f.Add(s)

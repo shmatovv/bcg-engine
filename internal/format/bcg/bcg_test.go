@@ -143,6 +143,66 @@ func FuzzDecodeNeverPanics(f *testing.F) {
 	})
 }
 
+func TestWireExpressionDepthMatchesSharedASTLimit(t *testing.T) {
+	encoded := &wireExpression{
+		Kind:  "constant",
+		Value: &wireTyped{Type: "integer", Data: "1"},
+	}
+	for index := 1; index < ast.MaxExpressionDepth; index++ {
+		encoded = &wireExpression{Kind: "negate", Operand: encoded}
+	}
+
+	decoded, err := encoded.toDomain("expression", 0)
+	if err != nil {
+		t.Fatalf("maximum supported expression depth rejected: %v", err)
+	}
+	if depth, valid := ast.Depth(decoded); !valid || depth != ast.MaxExpressionDepth {
+		t.Fatalf("decoded expression depth = %d, valid=%t", depth, valid)
+	}
+
+	tooDeep := &wireExpression{Kind: "negate", Operand: encoded}
+	if _, err := tooDeep.toDomain("expression", 0); err == nil {
+		t.Fatal("expression above the shared depth limit was accepted")
+	}
+}
+
+func TestMaximumDepthExpressionsRoundTripInArtifact(t *testing.T) {
+	var expression ast.Expression = ast.NewConstant(value.NewTyped(value.NewBool(true)))
+	for depth := 1; depth < ast.MaxExpressionDepth; depth++ {
+		expression = ast.NewNot(expression)
+	}
+
+	typeID, propertyID, entityID, relationTypeID := identity.New(), identity.New(), identity.New(), identity.New()
+	draft := model.NewDraft()
+	draft.AddEntityType(schema.NewEntityType(typeID, "node", nil, []identity.UUID{propertyID}))
+	draft.AddPropertyDefinition(schema.NewPropertyDefinition(
+		propertyID, schema.EntityTypeOwner(typeID), identity.UUID{}, false,
+		"flag", value.Bool, unit.Unit{}, false, schema.TemporalScalar, schema.DerivedComputation(expression),
+	))
+	draft.AddEntity(semantic.NewEntity(entityID, typeID, "", false))
+	draft.AddRelationType(schema.NewRelationType(relationTypeID, "link", schema.TypeConstraint{}, false, schema.TypeConstraint{}, false, nil))
+	draft.AddRelation(semantic.NewRelation(identity.New(), relationTypeID, entityID, entityID, expression, true))
+	draft.AddConstraint(constraint.New(identity.New(), "check", expression, true, expression, constraint.SeverityHard, "", false))
+	draft.AddRule(rule.New(identity.New(), "rule", expression))
+	version, err := model.Commit(model.NewModel(identity.New(), "depth"), draft,
+		model.NewCommitOptions(identity.New(), "depth", precision.New(2, precision.HalfEven)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	artifact, err := NewArtifact("depth", version, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded := mustMarshal(t, artifact)
+	decoded, err := Unmarshal(encoded)
+	if err != nil {
+		t.Fatalf("committed maximum-depth expressions must remain portable: %v", err)
+	}
+	if !bytes.Equal(encoded, mustMarshal(t, decoded)) {
+		t.Fatal("maximum-depth artifact changed during canonical round trip")
+	}
+}
+
 func TestExpressionCodecCoversEveryCurrentASTNode(t *testing.T) {
 	definitionID := identity.MustParse("00000000-0000-4000-8000-000000000011")
 	contractID := identity.MustParse("00000000-0000-4000-8000-000000000012")

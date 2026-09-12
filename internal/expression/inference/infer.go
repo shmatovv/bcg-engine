@@ -89,29 +89,9 @@ func (e Error) Error() string {
 	}
 }
 
-// Infer recursively determines the static type of expression.
-//
-// Infer is the central entry point for static expression inference.
-//
-// At this stage it supports:
-//
-//   - Constant;
-//   - SelfPropertyReference;
-//   - AbsolutePropertyReference;
-//   - BoundPropertyDefinitionReference;
-//   - BoundContractPropertyReference;
-//   - Arithmetic;
-//   - Negate;
-//   - Comparison;
-//   - Logical;
-//   - Not;
-//   - If;
-//   - IsNull;
-//   - Coalesce.
-//
-// Aggregate is intentionally connected in the next step because aggregate
-// inference must derive and introduce a traversal binding context before
-// recursively inferring its filter and map expressions.
+// Infer determines the static type of expression in its lexical context.
+// Aggregate inference introduces traversal bindings for filter and map;
+// standalone contexts never acquire an implicit self.
 func Infer(
 	expression ast.Expression,
 	context Context,
@@ -132,6 +112,22 @@ func Infer(
 			kind: ErrorInvalidExpression,
 			cause: fmt.Errorf(
 				"inference: invalid inference context",
+			),
+		}
+	}
+
+	depth, valid := ast.Depth(expression)
+	if !valid {
+		return typing.Type{}, Error{
+			kind: ErrorInvalidExpression,
+		}
+	}
+	if depth > ast.MaxExpressionDepth {
+		return typing.Type{}, Error{
+			kind: ErrorInvalidExpression,
+			cause: fmt.Errorf(
+				"inference: expression nesting exceeds %d",
+				ast.MaxExpressionDepth,
 			),
 		}
 	}

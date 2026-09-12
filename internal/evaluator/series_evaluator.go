@@ -69,6 +69,11 @@ type seriesEvaluationState struct {
 	// Scalar nodes can occur as a whole-Series IF condition. The established
 	// scalar evaluator retains its own memo and lazy semantics for that path.
 	scalar *evaluationState
+
+	// expressionDepth is separate from scalar.expressionDepth because Series
+	// expressions recurse through their own evaluator. It prevents a deeply
+	// nested valid Series expression/property chain from exhausting a Go stack.
+	expressionDepth int
 }
 
 func newSeriesEvaluationState(version model.ModelVersion, context runtime.CalculationContext, effectivePlan plan.Plan) *seriesEvaluationState {
@@ -279,6 +284,21 @@ func seriesUnit(stored series.Series) unit.Unit {
 }
 
 func (s *seriesEvaluationState) evaluateExpression(expression ast.Expression, context expressionContext, demand *seriesDemand) (seriesPartial, error) {
+	if s.expressionDepth >= maxEvaluationDepth {
+		return seriesPartial{}, newError(
+			ErrorEvaluationDepthExceeded,
+			"Series evaluation exceeded the maximum supported nested expression depth",
+			nil,
+		)
+	}
+	s.expressionDepth++
+	defer func() {
+		s.expressionDepth--
+		if s.expressionDepth < 0 {
+			panic("evaluator: Series expression depth underflow")
+		}
+	}()
+
 	if expression == nil || !context.IsValid() {
 		return seriesPartial{}, invalidCommittedExpressionError()
 	}

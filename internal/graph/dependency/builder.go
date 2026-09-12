@@ -32,6 +32,10 @@ func Build(
 	builder := graphBuilder{
 		source: source,
 		graph:  newGraph(),
+
+		entityTypes:   make(map[identity.UUID]schema.EntityType),
+		relationTypes: make(map[identity.UUID]schema.RelationType),
+		objectOwners:  make(map[address.ObjectRef]schema.PropertyOwner),
 	}
 
 	if err := builder.addEntityProperties(); err != nil {
@@ -48,6 +52,14 @@ func Build(
 type graphBuilder struct {
 	source Source
 	graph  Graph
+
+	// Schema values validate their owned definition slices. Revalidating the
+	// same type for every Entity, Relation or property reference turns a wide
+	// model into O(objects × definitions). These maps retain only already
+	// validated immutable source objects for this one Build invocation.
+	entityTypes   map[identity.UUID]schema.EntityType
+	relationTypes map[identity.UUID]schema.RelationType
+	objectOwners  map[address.ObjectRef]schema.PropertyOwner
 }
 
 func (b *graphBuilder) addEntityProperties() error {
@@ -71,15 +83,8 @@ func (b *graphBuilder) addEntityProperties() error {
 			)
 		}
 
-		entityType, ok :=
-			b.source.EntityType(
-				entity.TypeID(),
-			)
-
-		if !ok ||
-			!entityType.IsValid() ||
-			entityType.ID() !=
-				entity.TypeID() {
+		entityType, ok := b.entityType(entity.TypeID())
+		if !ok {
 
 			return newBuildError(
 				BuildErrorTypeNotFound,
@@ -96,6 +101,7 @@ func (b *graphBuilder) addEntityProperties() error {
 			schema.EntityTypeOwner(
 				entityType.ID(),
 			)
+		b.objectOwners[object] = owner
 
 		if err := b.addObjectProperties(
 			object,
@@ -130,15 +136,8 @@ func (b *graphBuilder) addRelationProperties() error {
 			)
 		}
 
-		relationType, ok :=
-			b.source.RelationType(
-				relation.TypeID(),
-			)
-
-		if !ok ||
-			!relationType.IsValid() ||
-			relationType.ID() !=
-				relation.TypeID() {
+		relationType, ok := b.relationType(relation.TypeID())
+		if !ok {
 
 			return newBuildError(
 				BuildErrorTypeNotFound,
@@ -155,6 +154,7 @@ func (b *graphBuilder) addRelationProperties() error {
 			schema.RelationTypeOwner(
 				relationType.ID(),
 			)
+		b.objectOwners[object] = owner
 
 		if err := b.addObjectProperties(
 			object,
@@ -247,7 +247,10 @@ func (b *graphBuilder) addObjectProperties(
 
 		extractor :=
 			expressionExtractor{
-				source: b.source,
+				source:        b.source,
+				entityTypes:   b.entityTypes,
+				relationTypes: b.relationTypes,
+				objectOwners:  b.objectOwners,
 			}
 
 		dependencies, err :=
@@ -272,4 +275,28 @@ func (b *graphBuilder) addObjectProperties(
 	}
 
 	return nil
+}
+
+func (b *graphBuilder) entityType(id identity.UUID) (schema.EntityType, bool) {
+	if result, exists := b.entityTypes[id]; exists {
+		return result, true
+	}
+	result, exists := b.source.EntityType(id)
+	if !exists || !result.IsValid() || result.ID() != id {
+		return schema.EntityType{}, false
+	}
+	b.entityTypes[id] = result
+	return result, true
+}
+
+func (b *graphBuilder) relationType(id identity.UUID) (schema.RelationType, bool) {
+	if result, exists := b.relationTypes[id]; exists {
+		return result, true
+	}
+	result, exists := b.source.RelationType(id)
+	if !exists || !result.IsValid() || result.ID() != id {
+		return schema.RelationType{}, false
+	}
+	b.relationTypes[id] = result
+	return result, true
 }

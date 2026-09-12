@@ -74,8 +74,6 @@ func (v ModelVersion) ConstraintDependencies(constraintID identity.UUID) (Constr
 
 // ConstraintIDsDependingOn returns an owned deterministic list of Constraints
 // that structurally read propertyAddress in their applicability or assertion.
-// It is a computational-dependency foundation for future Constraint Impact;
-// the existing property-only Impact API remains unchanged.
 func (v ModelVersion) ConstraintIDsDependingOn(propertyAddress address.PropertyAddress) []identity.UUID {
 	if !propertyAddress.IsValid() {
 		return nil

@@ -22,9 +22,10 @@ func ExtractStandaloneExpression(
 		panic("dependency: source must not be nil")
 	}
 
-	return expressionExtractor{
+	extractor := expressionExtractor{
 		source: source,
-	}.extract(
+	}
+	return extractor.extract(
 		expression,
 		extractionContext{},
 	)

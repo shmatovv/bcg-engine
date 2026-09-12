@@ -701,7 +701,7 @@ func ownerForObject(
 			)
 
 		if !ok ||
-			!entityType.IsValid() {
+			entityType.ID() != entity.TypeID() {
 
 			return schema.PropertyOwner{},
 				false
@@ -730,7 +730,7 @@ func ownerForObject(
 			)
 
 		if !ok ||
-			!relationType.IsValid() {
+			relationType.ID() != relation.TypeID() {
 
 			return schema.PropertyOwner{},
 				false
