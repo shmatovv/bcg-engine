@@ -13,27 +13,16 @@ import (
 	enginevalue "github.com/shmatovv/bcg-engine/internal/types/value"
 )
 
+// One evaluates one committed Constraint using the normal scalar evaluator.
+// Constraints accept only At contexts: Period × Constraint would require an
+// explicit temporal reduction that Core v1 intentionally does not define.
 func One(
 	version model.ModelVersion,
 	constraintID identity.UUID,
 	context runtime.CalculationContext,
 ) (Result, error) {
-	if !version.IsCommitted() {
-		return Result{},
-			newError(
-				ErrorInvalidModelVersion,
-				"Constraint checking requires a committed ModelVersion",
-				nil,
-			)
-	}
-
-	if !context.IsValid() {
-		return Result{},
-			newError(
-				ErrorInvalidCalculationContext,
-				"CalculationContext is invalid",
-				nil,
-			)
+	if err := validateRequest(version, context); err != nil {
+		return Result{}, err
 	}
 
 	modelConstraint, ok := version.Constraint(constraintID)
@@ -53,33 +42,15 @@ func One(
 	)
 }
 
+// All evaluates every committed Constraint in deterministic UUID order. All
+// Constraints are evaluated even after a Hard violation so a Feasibility
+// report can retain the complete set of outcomes.
 func All(
 	version model.ModelVersion,
 	context runtime.CalculationContext,
 ) (Report, error) {
-	if !version.IsCommitted() {
-		return Report{},
-			newError(
-				ErrorInvalidModelVersion,
-				"Constraint checking requires a committed ModelVersion",
-				nil,
-			)
-	}
-
-	if !context.IsValid() {
-		return Report{},
-			newError(
-				ErrorInvalidCalculationContext,
-				"CalculationContext is invalid",
-				nil,
-			)
-	}
-
-	if context.TimeContext().Kind() != domaintime.ContextAt {
-		return Report{}, newError(ErrorInvalidCalculationContext, "scalar evaluation requires an At time context", nil)
-	}
-	if err := resolvervalue.ValidateContext(version, context); err != nil {
-		return Report{}, newError(ErrorInvalidCalculationContext, "context is not valid for ModelVersion", err)
+	if err := validateRequest(version, context); err != nil {
+		return Report{}, err
 	}
 
 	constraints := version.Constraints()
@@ -114,6 +85,45 @@ func All(
 	}
 
 	return newReport(results), nil
+}
+
+func validateRequest(
+	version model.ModelVersion,
+	context runtime.CalculationContext,
+) error {
+	if !version.IsCommitted() {
+		return newError(
+			ErrorInvalidModelVersion,
+			"Constraint checking requires a committed ModelVersion",
+			nil,
+		)
+	}
+
+	if !context.IsValid() {
+		return newError(
+			ErrorInvalidCalculationContext,
+			"CalculationContext is invalid",
+			nil,
+		)
+	}
+
+	if context.TimeContext().Kind() != domaintime.ContextAt {
+		return newError(
+			ErrorUnsupportedTimeContext,
+			"Constraint evaluation requires an At time context",
+			nil,
+		)
+	}
+
+	if err := resolvervalue.ValidateContext(version, context); err != nil {
+		return newError(
+			ErrorInvalidCalculationContext,
+			"context is not valid for ModelVersion",
+			err,
+		)
+	}
+
+	return nil
 }
 
 func evaluateConstraint(
@@ -215,6 +225,9 @@ func evaluateConstraint(
 	), nil
 }
 
+// boolState preserves the evaluator's Null/Undefined distinction until the
+// constraint decision boundary. Neither state is Boolean false; both make a
+// Constraint indeterminate and preserve its evaluator Result/provenance.
 func boolState(
 	resolved enginevalue.Resolved,
 ) (bool, bool, error) {

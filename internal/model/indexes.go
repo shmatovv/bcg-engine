@@ -3,6 +3,7 @@ package model
 import (
 	"sort"
 
+	"github.com/shmatovv/bcg-engine/internal/domain/address"
 	"github.com/shmatovv/bcg-engine/internal/domain/constraint"
 	"github.com/shmatovv/bcg-engine/internal/domain/identity"
 	"github.com/shmatovv/bcg-engine/internal/domain/rule"
@@ -31,6 +32,10 @@ type indexes struct {
 	relationByID map[identity.UUID]semantic.Relation
 
 	constraintByID map[identity.UUID]constraint.Constraint
+
+	constraintDependenciesByID map[identity.UUID]ConstraintDependencies
+
+	constraintIDsByDependency map[address.PropertyAddress][]identity.UUID
 
 	ruleByID map[identity.UUID]rule.Rule
 
@@ -97,6 +102,15 @@ func buildIndexes(
 		constraintByID: make(
 			map[identity.UUID]constraint.Constraint,
 			len(constraints),
+		),
+
+		constraintDependenciesByID: make(
+			map[identity.UUID]ConstraintDependencies,
+			len(constraints),
+		),
+
+		constraintIDsByDependency: make(
+			map[address.PropertyAddress][]identity.UUID,
 		),
 
 		ruleByID: make(

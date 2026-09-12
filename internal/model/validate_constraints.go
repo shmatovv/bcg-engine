@@ -1,10 +1,12 @@
 package model
 
 import (
+	"github.com/shmatovv/bcg-engine/internal/domain/constraint"
 	"github.com/shmatovv/bcg-engine/internal/domain/identity"
 	"github.com/shmatovv/bcg-engine/internal/expression/ast"
 	"github.com/shmatovv/bcg-engine/internal/expression/inference"
 	"github.com/shmatovv/bcg-engine/internal/expression/typing"
+	"github.com/shmatovv/bcg-engine/internal/graph/dependency"
 	"github.com/shmatovv/bcg-engine/internal/types/value"
 )
 
@@ -24,9 +26,9 @@ func (d *Draft) validateConstraints(
 			continue
 		}
 
-		if applicability, hasApplicability :=
-			modelConstraint.Applicability(); hasApplicability {
-			validateConstraintBooleanExpression(
+		applicabilityValid := true
+		if applicability, hasApplicability := modelConstraint.Applicability(); hasApplicability {
+			applicabilityValid = validateConstraintBooleanExpression(
 				report,
 				modelConstraint.ID(),
 				applicability,
@@ -36,7 +38,7 @@ func (d *Draft) validateConstraints(
 			)
 		}
 
-		validateConstraintBooleanExpression(
+		assertionValid := validateConstraintBooleanExpression(
 			report,
 			modelConstraint.ID(),
 			modelConstraint.Assertion(),
@@ -44,6 +46,9 @@ func (d *Draft) validateConstraints(
 			ValidationIssueInvalidConstraintAssertion,
 			"constraint assertion",
 		)
+		if applicabilityValid && assertionValid {
+			d.validateConstraintDependencies(report, indexes, modelConstraint)
+		}
 	}
 }
 
@@ -54,7 +59,7 @@ func validateConstraintBooleanExpression(
 	resolver validationInferenceResolver,
 	kind ValidationIssueKind,
 	label string,
-) {
+) bool {
 	if expression == nil {
 		report.append(
 			newSubjectValidationIssue(
@@ -63,7 +68,7 @@ func validateConstraintBooleanExpression(
 				label+" must not be nil",
 			),
 		)
-		return
+		return false
 	}
 
 	inferred, err := inference.Infer(
@@ -79,7 +84,7 @@ func validateConstraintBooleanExpression(
 				label+" cannot be statically inferred: "+err.Error(),
 			),
 		)
-		return
+		return false
 	}
 
 	if inferred.ValueType() != value.Bool ||
@@ -92,5 +97,19 @@ func validateConstraintBooleanExpression(
 				label+" must be a unitless Scalar Bool expression",
 			),
 		)
+		return false
+	}
+	return true
+}
+
+func (d *Draft) validateConstraintDependencies(report *ValidationReport, indexes validationIndexes, modelConstraint constraint.Constraint) {
+	source := newDraftDependencySource(d, indexes)
+	if applicability, hasApplicability := modelConstraint.Applicability(); hasApplicability {
+		if _, err := dependency.ExtractStandaloneExpression(source, applicability); err != nil {
+			report.append(newSubjectValidationIssue(ValidationIssueInvalidConstraintApplicability, modelConstraint.ID(), "constraint applicability dependencies cannot be extracted: "+err.Error()))
+		}
+	}
+	if _, err := dependency.ExtractStandaloneExpression(source, modelConstraint.Assertion()); err != nil {
+		report.append(newSubjectValidationIssue(ValidationIssueInvalidConstraintAssertion, modelConstraint.ID(), "constraint assertion dependencies cannot be extracted: "+err.Error()))
 	}
 }

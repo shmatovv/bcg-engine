@@ -167,7 +167,7 @@ func newModelVersionSnapshot(
 	constraints = cloneSlice(constraints)
 	rules = cloneSlice(rules)
 
-	return ModelVersion{
+	result := ModelVersion{
 		id:              id,
 		modelID:         modelID,
 		parentVersionID: parentVersionID,
@@ -201,6 +201,15 @@ func newModelVersionSnapshot(
 			valueBindings,
 		),
 	}
+
+	dependencies, reverse, err := buildConstraintDependencyIndexes(result)
+	if err != nil {
+		panic("model: Constraint dependency extraction failed for internally constructed snapshot")
+	}
+	result.indexes.constraintDependenciesByID = dependencies
+	result.indexes.constraintIDsByDependency = reverse
+
+	return result
 }
 
 func (v ModelVersion) ID() identity.UUID {
