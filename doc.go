@@ -13,8 +13,9 @@
 // Go error; Go errors indicate invalid requests or engine failures.
 //
 // The package intentionally does not expose internal domain objects,
-// dependency graphs, or evaluator caches. Typed schema and expression
-// authoring operations are added separately from the lifecycle API.
+// dependency graphs, or evaluator caches. Typed EntityType, RelationType,
+// PropertyDefinition, PropertyContract, Trait, and ScopeDefinition values are
+// authored through Draft. Expression AST construction is added separately.
 //
 // ValueType describes scalar schema metadata, while Value holds an actual
 // defined value. Dimension and Unit provide exact, domain-neutral unit

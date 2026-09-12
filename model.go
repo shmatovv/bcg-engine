@@ -381,6 +381,7 @@ type PropertyInfo struct {
 	temporalMode, computation string
 	unit                      Unit
 	hasUnit                   bool
+	definition                PropertyDefinition
 }
 
 // ID returns the PropertyDefinition UUID.
@@ -409,6 +410,12 @@ func (p PropertyInfo) Computation() string { return p.computation }
 
 // Unit returns p's optional declared unit.
 func (p PropertyInfo) Unit() (Unit, bool) { return p.unit, p.hasUnit }
+
+// Schema returns the complete immutable public schema declaration represented
+// by p. It is provided in addition to the long-standing compact PropertyInfo
+// accessors so callers can inspect authoring-relevant typed fields without
+// exposing internal AST implementations.
+func (p PropertyInfo) Schema() PropertyDefinition { return p.definition }
 
 // Entities returns deterministic Entity descriptors.
 func (m Model) Entities() []EntityInfo {
@@ -453,9 +460,10 @@ func (m Model) PropertyContracts() []NamedInfo { return namedContracts(m) }
 
 // ScopeDefinitionInfo is one scope dimension and the type of its selected Value.
 type ScopeDefinitionInfo struct {
-	id        ID
-	name      string
-	valueKind ValueKind
+	id         ID
+	name       string
+	valueKind  ValueKind
+	definition ScopeDefinition
 }
 
 // ID returns the ScopeDefinition UUID.
@@ -466,6 +474,9 @@ func (s ScopeDefinitionInfo) Name() string { return s.name }
 
 // ValueKind returns the type required by this scope dimension.
 func (s ScopeDefinitionInfo) ValueKind() ValueKind { return s.valueKind }
+
+// Schema returns the complete immutable public scope declaration represented by s.
+func (s ScopeDefinitionInfo) Schema() ScopeDefinition { return s.definition }
 
 // ScopeDefinitions returns deterministic scope-dimension descriptors.
 func (m Model) ScopeDefinitions() []ScopeDefinitionInfo { return scopeInfos(m) }
@@ -537,6 +548,66 @@ func (m Model) Relation(id ID) (RelationInfo, bool) {
 	return RelationInfo{id: idFromInternal(item.ID()), typeID: idFromInternal(item.TypeID()), from: idFromInternal(item.From()), to: idFromInternal(item.To())}, true
 }
 
+// EntityType looks up one complete immutable EntityType declaration by UUID.
+func (m Model) EntityType(id ID) (EntityType, bool) {
+	if !m.IsValid() || id.IsZero() {
+		return EntityType{}, false
+	}
+	item, ok := m.version.EntityType(id.value)
+	if !ok {
+		return EntityType{}, false
+	}
+	return EntityType{value: item}, true
+}
+
+// RelationType looks up one complete immutable RelationType declaration by UUID.
+func (m Model) RelationType(id ID) (RelationType, bool) {
+	if !m.IsValid() || id.IsZero() {
+		return RelationType{}, false
+	}
+	item, ok := m.version.RelationType(id.value)
+	if !ok {
+		return RelationType{}, false
+	}
+	return RelationType{value: item}, true
+}
+
+// Trait looks up one complete immutable Trait declaration by UUID.
+func (m Model) Trait(id ID) (Trait, bool) {
+	if !m.IsValid() || id.IsZero() {
+		return Trait{}, false
+	}
+	item, ok := m.version.Trait(id.value)
+	if !ok {
+		return Trait{}, false
+	}
+	return Trait{value: item}, true
+}
+
+// PropertyContract looks up one complete immutable PropertyContract declaration by UUID.
+func (m Model) PropertyContract(id ID) (PropertyContract, bool) {
+	if !m.IsValid() || id.IsZero() {
+		return PropertyContract{}, false
+	}
+	item, ok := m.version.PropertyContract(id.value)
+	if !ok {
+		return PropertyContract{}, false
+	}
+	return PropertyContract{value: item}, true
+}
+
+// ScopeDefinition looks up one complete immutable ScopeDefinition declaration by UUID.
+func (m Model) ScopeDefinition(id ID) (ScopeDefinition, bool) {
+	if !m.IsValid() || id.IsZero() {
+		return ScopeDefinition{}, false
+	}
+	item, ok := m.version.ScopeDefinition(id.value)
+	if !ok {
+		return ScopeDefinition{}, false
+	}
+	return ScopeDefinition{value: item}, true
+}
+
 // PropertyDefinition looks up one property-schema descriptor by UUID.
 func (m Model) PropertyDefinition(id ID) (PropertyInfo, bool) {
 	if !m.IsValid() || id.IsZero() {
@@ -600,7 +671,7 @@ func scopeInfos(m Model) []ScopeDefinitionInfo {
 	items := m.version.ScopeDefinitions()
 	result := make([]ScopeDefinitionInfo, len(items))
 	for i, item := range items {
-		result[i] = ScopeDefinitionInfo{id: idFromInternal(item.ID()), name: item.Name(), valueKind: valueKindFromInternal(item.ValueType())}
+		result[i] = ScopeDefinitionInfo{id: idFromInternal(item.ID()), name: item.Name(), valueKind: valueKindFromInternal(item.ValueType()), definition: ScopeDefinition{value: item}}
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].id.String() < result[j].id.String() })
 	return result
@@ -615,7 +686,7 @@ func propertyInfo(item schema.PropertyDefinition) PropertyInfo {
 	if item.Owner().Kind() == schema.PropertyOwnerRelationType {
 		ownerKind = ObjectRelation
 	}
-	result := PropertyInfo{id: idFromInternal(item.ID()), ownerID: idFromInternal(item.Owner().ID()), ownerKind: ownerKind, name: item.Name(), valueKind: valueKindFromInternal(item.ValueType()), temporalMode: item.TemporalMode().String(), computation: item.Computation().Kind().String()}
+	result := PropertyInfo{id: idFromInternal(item.ID()), ownerID: idFromInternal(item.Owner().ID()), ownerKind: ownerKind, name: item.Name(), valueKind: valueKindFromInternal(item.ValueType()), temporalMode: item.TemporalMode().String(), computation: item.Computation().Kind().String(), definition: PropertyDefinition{value: item}}
 	if contractID, ok := item.ContractID(); ok {
 		result.contractID, result.hasContract = idFromInternal(contractID), true
 	}

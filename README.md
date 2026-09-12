@@ -95,15 +95,10 @@ data, err := bcg.Marshal(artifact)
 ```
 
 To edit a committed version, use `draft, err := committed.Edit()`, update the
-Draft (this step includes `SetName`), validate, and commit with a new version
-UUID. The new Model has the source version as its parent; the source Model is
-unchanged. `NewArtifact(committed, scenarios...)` accepts only Scenarios
-compatible with that exact committed version.
-
-This release establishes the lifecycle boundary. Typed schema, expression,
-entity, relation, value-binding, constraint, rule, and Scenario authoring are
-intentionally introduced in later v1.1 steps; callers never need wire JSON or
-an `internal/...` import for the lifecycle itself.
+Draft, validate, and commit with a new version UUID. The new Model has the
+source version as its parent; the source Model is unchanged.
+`NewArtifact(committed, scenarios...)` accepts only Scenarios compatible with
+that exact committed version.
 
 ## Authoring primitives
 
@@ -124,6 +119,111 @@ business units.
 are primitives only in this release; source-series and value-binding authoring
 arrive in later steps. `PrecisionPolicy` uses an explicit scale and one of
 `RoundTruncate`, `RoundFloor`, `RoundCeil`, `RoundHalfUp`, or `RoundHalfEven`.
+
+## Schema authoring
+
+Schema declarations are immutable typed values. Add them to a mutable Draft,
+then use `Validate` and `Commit`; unresolved references are allowed while a
+Draft is assembled, but no invalid schema can be committed. IDs are explicit.
+
+```go
+dimension, err := bcg.NewBaseDimension("currency")
+if err != nil {
+	return err
+}
+credit, err := bcg.NewUnit("credit", dimension, "currency", bcg.OneRational())
+if err != nil {
+	return err
+}
+contract, err := bcg.NewPropertyContract(bcg.PropertyContractSpec{
+	ID: contractID, Name: "price", ValueType: bcg.DecimalType,
+	Dimension: &dimension, TemporalMode: bcg.TemporalScalar,
+})
+if err != nil {
+	return err
+}
+trait, err := bcg.NewTrait(bcg.TraitSpec{
+	ID: traitID, Name: "Priced", RequiredPropertyContracts: []bcg.ID{contractID},
+})
+if err != nil {
+	return err
+}
+entityType, err := bcg.NewEntityType(bcg.EntityTypeSpec{
+	ID: entityTypeID, Name: "Product", Traits: []bcg.ID{traitID},
+	PropertyDefinitions: []bcg.ID{priceID},
+})
+if err != nil {
+	return err
+}
+owner, err := bcg.EntityTypeOwner(entityTypeID)
+if err != nil {
+	return err
+}
+price, err := bcg.NewPropertyDefinition(bcg.PropertyDefinitionSpec{
+	ID: priceID, Owner: owner, ContractID: contractID, Name: "price",
+	ValueType: bcg.DecimalType, Unit: credit, TemporalMode: bcg.TemporalScalar,
+	Computation: bcg.InputComputation(),
+})
+if err != nil {
+	return err
+}
+from, err := bcg.EntityTypeEndpoint(entityTypeID)
+if err != nil {
+	return err
+}
+to, err := bcg.TraitEndpoint(traitID)
+if err != nil {
+	return err
+}
+relationType, err := bcg.NewRelationType(bcg.RelationTypeSpec{
+	ID: relationTypeID, Name: "offers", From: from, To: to,
+})
+if err != nil {
+	return err
+}
+scope, err := bcg.NewScopeDefinition(bcg.ScopeDefinitionSpec{
+	ID: scopeID, Name: "region", ValueType: bcg.StringType,
+})
+if err != nil {
+	return err
+}
+if err := draft.AddPropertyContract(contract); err != nil { return err }
+if err := draft.AddTrait(trait); err != nil { return err }
+if err := draft.AddEntityType(entityType); err != nil { return err }
+if err := draft.AddPropertyDefinition(price); err != nil { return err }
+if err := draft.AddRelationType(relationType); err != nil { return err }
+if err := draft.AddScopeDefinition(scope); err != nil { return err }
+report, err := draft.Validate()
+if err != nil {
+	return err
+}
+if !report.OK() {
+	return fmt.Errorf("schema validation failed: %v", report.Issues())
+}
+committed, err := draft.Commit(options)
+```
+
+Use `ReplaceEntityType`, `ReplaceRelationType`, `ReplacePropertyDefinition`,
+`ReplacePropertyContract`, `ReplaceTrait`, and `ReplaceScopeDefinition` to
+update an existing Draft while retaining identity. Their corresponding
+`Remove...` operations never cascade; validation reports any dangling
+references. Read complete immutable declarations back with `Model.EntityType`,
+`Model.RelationType`, `Model.Trait`, `Model.PropertyContract`, and
+`Model.ScopeDefinition`; `PropertyInfo.Schema()` provides the full property
+declaration alongside the established compact read API.
+
+`PropertyContractSpec.Dimension == nil` means no dimensional requirement; a
+pointer to `DimensionlessDimension()` is an explicit dimensionless requirement.
+For a property, zero `Unit` means absent and `DimensionlessUnit()` is explicit.
+There is no built-in business unit catalog. BCG v1 schema objects do not carry
+metadata or scope ordering fields.
+
+Input properties are fully authorable in this step. `Expression` and
+`PropertyComputation` already form the typed derived-property boundary: an
+existing committed derived expression can be retained through an edit, but new
+expression AST construction is deliberately introduced in Step 4. Entity and
+relation instances, value bindings, series bindings, constraints, rules, and
+Scenario authoring are also later steps.
 
 For host-process safety, schema validation and `.bcg` decoding reject ASTs
 deeper than 512 nodes. Scalar and Series evaluation also bound active

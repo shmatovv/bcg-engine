@@ -142,6 +142,17 @@ func (m TemporalMode) internal() (schema.TemporalMode, error) {
 	}
 }
 
+func temporalModeFromInternal(mode schema.TemporalMode) (TemporalMode, error) {
+	switch mode {
+	case schema.TemporalScalar:
+		return TemporalScalar, nil
+	case schema.TemporalSeries:
+		return TemporalSeries, nil
+	default:
+		return 0, fmt.Errorf("%w: temporal mode is invalid", ErrInvalidArgument)
+	}
+}
+
 // DimensionID identifies one domain-defined base dimension. It is a symbolic
 // identifier, not a business-unit catalog entry.
 type DimensionID string
