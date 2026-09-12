@@ -39,6 +39,10 @@ type indexes struct {
 
 	ruleByID map[identity.UUID]rule.Rule
 
+	ruleDependenciesByID map[identity.UUID]RuleDependencies
+
+	ruleIDsByDependency map[address.PropertyAddress][]identity.UUID
+
 	entityTypesByTrait map[identity.UUID][]schema.EntityType
 
 	contractImplementationByOwner map[schema.PropertyOwner]map[identity.UUID]schema.PropertyDefinition
@@ -116,6 +120,15 @@ func buildIndexes(
 		ruleByID: make(
 			map[identity.UUID]rule.Rule,
 			len(rules),
+		),
+
+		ruleDependenciesByID: make(
+			map[identity.UUID]RuleDependencies,
+			len(rules),
+		),
+
+		ruleIDsByDependency: make(
+			map[address.PropertyAddress][]identity.UUID,
 		),
 
 		entityTypesByTrait: make(

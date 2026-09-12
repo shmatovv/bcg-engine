@@ -152,9 +152,8 @@ func (d *Draft) AddConstraint(
 	)
 }
 
-// AddRule adds one declarative side-effect-free Rule to the draft.
-//
-// Rule condition/effect references are validated model-wide by Validate.
+// AddRule adds one immutable declarative Rule to the draft.
+// Rule condition references are validated model-wide by Validate.
 func (d *Draft) AddRule(
 	modelRule rule.Rule,
 ) {

@@ -105,7 +105,7 @@ func TestConstraintRuleStatesAndFeasibility(t *testing.T) {
 	for _, severity := range []constraint.Severity{constraint.SeverityInfo, constraint.SeverityWarning, constraint.SeverityError} {
 		f.draft.AddConstraint(constraint.New(identity.New(), "advisory", nil, false, boolean(false), severity, "", false))
 	}
-	f.draft.AddRule(domainrule.New(ruleID, "rule", ref(input), domainrule.ActivateConstraint(hardID)))
+	f.draft.AddRule(domainrule.New(ruleID, "rule", ref(input)))
 	v := f.commit(t)
 	for _, mode := range []string{"true", "false", "null", "missing"} {
 		t.Run(mode, func(t *testing.T) {
@@ -149,9 +149,6 @@ func TestConstraintRuleStatesAndFeasibility(t *testing.T) {
 			}
 			if rule.State() != wantRule {
 				t.Fatal("wrong rule state")
-			}
-			if _, active := rule.ActiveEffect(); active != (mode == "true") {
-				t.Fatal("wrong active effect")
 			}
 		})
 	}

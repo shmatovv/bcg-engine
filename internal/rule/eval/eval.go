@@ -10,7 +10,6 @@ import (
 	"github.com/shmatovv/bcg-engine/internal/model"
 	resolvervalue "github.com/shmatovv/bcg-engine/internal/resolver/value"
 	"github.com/shmatovv/bcg-engine/internal/runtime"
-	enginevalue "github.com/shmatovv/bcg-engine/internal/types/value"
 )
 
 // One evaluates one committed Rule.
@@ -19,22 +18,8 @@ func One(
 	ruleID identity.UUID,
 	context runtime.CalculationContext,
 ) (Result, error) {
-	if !version.IsCommitted() {
-		return Result{},
-			newError(
-				ErrorInvalidModelVersion,
-				"Rule evaluation requires a committed ModelVersion",
-				nil,
-			)
-	}
-
-	if !context.IsValid() {
-		return Result{},
-			newError(
-				ErrorInvalidCalculationContext,
-				"CalculationContext is invalid",
-				nil,
-			)
+	if err := validateRequest(version, context); err != nil {
+		return Result{}, err
 	}
 
 	modelRule, ok := version.Rule(ruleID)
@@ -59,29 +44,8 @@ func All(
 	version model.ModelVersion,
 	context runtime.CalculationContext,
 ) (Report, error) {
-	if !version.IsCommitted() {
-		return Report{},
-			newError(
-				ErrorInvalidModelVersion,
-				"Rule evaluation requires a committed ModelVersion",
-				nil,
-			)
-	}
-
-	if !context.IsValid() {
-		return Report{},
-			newError(
-				ErrorInvalidCalculationContext,
-				"CalculationContext is invalid",
-				nil,
-			)
-	}
-
-	if context.TimeContext().Kind() != domaintime.ContextAt {
-		return Report{}, newError(ErrorInvalidCalculationContext, "scalar evaluation requires an At time context", nil)
-	}
-	if err := resolvervalue.ValidateContext(version, context); err != nil {
-		return Report{}, newError(ErrorInvalidCalculationContext, "context is not valid for ModelVersion", err)
+	if err := validateRequest(version, context); err != nil {
+		return Report{}, err
 	}
 
 	rules := version.Rules()
@@ -121,6 +85,28 @@ func All(
 	return newReport(results), nil
 }
 
+// validateRequest deliberately matches the Constraint Core's At-only scalar
+// decision contract. A Period would require an explicit temporal reduction,
+// which Rule Core v1 does not define.
+func validateRequest(
+	version model.ModelVersion,
+	context runtime.CalculationContext,
+) error {
+	if !version.IsCommitted() {
+		return newError(ErrorInvalidModelVersion, "Rule evaluation requires a committed ModelVersion", nil)
+	}
+	if !context.IsValid() {
+		return newError(ErrorInvalidCalculationContext, "CalculationContext is invalid", nil)
+	}
+	if context.TimeContext().Kind() != domaintime.ContextAt {
+		return newError(ErrorUnsupportedTimeContext, "Rule evaluation requires an At time context", nil)
+	}
+	if err := resolvervalue.ValidateContext(version, context); err != nil {
+		return newError(ErrorInvalidCalculationContext, "context is not valid for ModelVersion", err)
+	}
+	return nil
+}
+
 func evaluateRule(
 	version model.ModelVersion,
 	modelRule domainrule.Rule,
@@ -140,11 +126,9 @@ func evaluateRule(
 			)
 	}
 
-	active, undefined, err := boolState(
-		condition.Value(),
-	)
+	active, undefined, err := evaluator.InterpretScalarBool(condition.Value())
 	if err != nil {
-		return Result{}, err
+		return Result{}, newError(ErrorInvariantViolation, "committed Rule condition did not evaluate to unitless Bool", err)
 	}
 
 	state := StateInactive
@@ -160,40 +144,6 @@ func evaluateRule(
 		state,
 		condition,
 	), nil
-}
-
-func boolState(
-	resolved enginevalue.Resolved,
-) (bool, bool, error) {
-	if !resolved.IsValid() {
-		return false,
-			false,
-			newError(
-				ErrorInvariantViolation,
-				"Rule condition produced an invalid resolved value",
-				nil,
-			)
-	}
-
-	if resolved.IsNull() ||
-		resolved.IsUndefined() {
-		return false, true, nil
-	}
-
-	typed := resolved.Value()
-
-	if typed.Type() != enginevalue.Bool ||
-		typed.HasUnit() {
-		return false,
-			false,
-			newError(
-				ErrorInvariantViolation,
-				"committed Rule condition did not evaluate to unitless Bool",
-				nil,
-			)
-	}
-
-	return typed.Raw().Bool(), false, nil
 }
 
 func compareUUID(

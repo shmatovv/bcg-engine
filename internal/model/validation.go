@@ -77,7 +77,6 @@ const (
 	ValidationIssueInvalidConstraintApplicability
 	ValidationIssueInvalidConstraintAssertion
 	ValidationIssueInvalidRuleCondition
-	ValidationIssueRuleEffectTargetNotFound
 
 	ValidationIssueDependencyGraphBuildFailure
 	ValidationIssueCycle
@@ -150,7 +149,6 @@ func (k ValidationIssueKind) IsValid() bool {
 		ValidationIssueInvalidConstraintApplicability,
 		ValidationIssueInvalidConstraintAssertion,
 		ValidationIssueInvalidRuleCondition,
-		ValidationIssueRuleEffectTargetNotFound,
 
 		ValidationIssueDependencyGraphBuildFailure,
 		ValidationIssueCycle:
@@ -271,8 +269,6 @@ func (k ValidationIssueKind) String() string {
 		return "InvalidConstraintAssertion"
 	case ValidationIssueInvalidRuleCondition:
 		return "InvalidRuleCondition"
-	case ValidationIssueRuleEffectTargetNotFound:
-		return "RuleEffectTargetNotFound"
 	case ValidationIssueDependencyGraphBuildFailure:
 		return "DependencyGraphBuildFailure"
 	case ValidationIssueCycle:

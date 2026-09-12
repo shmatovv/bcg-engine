@@ -49,7 +49,7 @@ func (d ConstraintDependencies) Assertion() []address.PropertyAddress {
 func (d ConstraintDependencies) All() []address.PropertyAddress {
 	result := append([]address.PropertyAddress(nil), d.applicability...)
 	result = append(result, d.assertion...)
-	sortPropertyAddresses(result)
+	sortDependencyPropertyAddresses(result)
 	unique := result[:0]
 	for _, item := range result {
 		if len(unique) == 0 || unique[len(unique)-1] != item {
@@ -62,7 +62,7 @@ func (d ConstraintDependencies) All() []address.PropertyAddress {
 // IsValid reports whether the dependency lists contain valid, canonical,
 // duplicate-free PropertyAddress values.
 func (d ConstraintDependencies) IsValid() bool {
-	return validCanonicalAddresses(d.applicability) && validCanonicalAddresses(d.assertion)
+	return validCanonicalDependencyAddresses(d.applicability) && validCanonicalDependencyAddresses(d.assertion)
 }
 
 // ConstraintDependencies resolves one committed Constraint's indexed
@@ -87,7 +87,7 @@ func buildConstraintDependencyIndexes(version ModelVersion) (map[identity.UUID]C
 	byConstraint := make(map[identity.UUID]ConstraintDependencies, len(version.constraints))
 	byProperty := make(map[address.PropertyAddress][]identity.UUID)
 	constraints := append([]constraint.Constraint(nil), version.constraints...)
-	sort.Slice(constraints, func(i, j int) bool { return compareConstraintUUID(constraints[i].ID(), constraints[j].ID()) < 0 })
+	sort.Slice(constraints, func(i, j int) bool { return compareDependencyUUID(constraints[i].ID(), constraints[j].ID()) < 0 })
 	for _, modelConstraint := range constraints {
 		var applicability []address.PropertyAddress
 		if expression, hasApplicability := modelConstraint.Applicability(); hasApplicability {
@@ -109,36 +109,36 @@ func buildConstraintDependencyIndexes(version ModelVersion) (map[identity.UUID]C
 	}
 	for propertyAddress := range byProperty {
 		ids := byProperty[propertyAddress]
-		sort.Slice(ids, func(i, j int) bool { return compareConstraintUUID(ids[i], ids[j]) < 0 })
+		sort.Slice(ids, func(i, j int) bool { return compareDependencyUUID(ids[i], ids[j]) < 0 })
 		byProperty[propertyAddress] = ids
 	}
 	return byConstraint, byProperty, nil
 }
 
-func validCanonicalAddresses(values []address.PropertyAddress) bool {
+func validCanonicalDependencyAddresses(values []address.PropertyAddress) bool {
 	for index, item := range values {
-		if !item.IsValid() || (index > 0 && !lessConstraintAddress(values[index-1], item)) {
+		if !item.IsValid() || (index > 0 && !lessDependencyAddress(values[index-1], item)) {
 			return false
 		}
 	}
 	return true
 }
 
-func sortPropertyAddresses(values []address.PropertyAddress) {
-	sort.Slice(values, func(i, j int) bool { return lessConstraintAddress(values[i], values[j]) })
+func sortDependencyPropertyAddresses(values []address.PropertyAddress) {
+	sort.Slice(values, func(i, j int) bool { return lessDependencyAddress(values[i], values[j]) })
 }
 
-func lessConstraintAddress(left, right address.PropertyAddress) bool {
+func lessDependencyAddress(left, right address.PropertyAddress) bool {
 	if left.Object().Kind() != right.Object().Kind() {
 		return left.Object().Kind() < right.Object().Kind()
 	}
-	if comparison := compareConstraintUUID(left.Object().ID(), right.Object().ID()); comparison != 0 {
+	if comparison := compareDependencyUUID(left.Object().ID(), right.Object().ID()); comparison != 0 {
 		return comparison < 0
 	}
-	return compareConstraintUUID(left.DefinitionID(), right.DefinitionID()) < 0
+	return compareDependencyUUID(left.DefinitionID(), right.DefinitionID()) < 0
 }
 
-func compareConstraintUUID(left, right identity.UUID) int {
+func compareDependencyUUID(left, right identity.UUID) int {
 	leftBytes, rightBytes := left.Bytes(), right.Bytes()
 	for index := range leftBytes {
 		if leftBytes[index] < rightBytes[index] {

@@ -8,6 +8,7 @@ const (
 	ErrorInvalid ErrorKind = iota
 	ErrorInvalidModelVersion
 	ErrorInvalidCalculationContext
+	ErrorUnsupportedTimeContext
 	ErrorRuleNotFound
 	ErrorEvaluationFailure
 	ErrorInvariantViolation
@@ -17,6 +18,7 @@ func (k ErrorKind) IsValid() bool {
 	switch k {
 	case ErrorInvalidModelVersion,
 		ErrorInvalidCalculationContext,
+		ErrorUnsupportedTimeContext,
 		ErrorRuleNotFound,
 		ErrorEvaluationFailure,
 		ErrorInvariantViolation:
@@ -32,6 +34,8 @@ func (k ErrorKind) String() string {
 		return "InvalidModelVersion"
 	case ErrorInvalidCalculationContext:
 		return "InvalidCalculationContext"
+	case ErrorUnsupportedTimeContext:
+		return "UnsupportedTimeContext"
 	case ErrorRuleNotFound:
 		return "RuleNotFound"
 	case ErrorEvaluationFailure:

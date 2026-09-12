@@ -209,6 +209,13 @@ func newModelVersionSnapshot(
 	result.indexes.constraintDependenciesByID = dependencies
 	result.indexes.constraintIDsByDependency = reverse
 
+	ruleDependencies, ruleReverse, err := buildRuleDependencyIndexes(result)
+	if err != nil {
+		panic("model: Rule dependency extraction failed for internally constructed snapshot")
+	}
+	result.indexes.ruleDependenciesByID = ruleDependencies
+	result.indexes.ruleIDsByDependency = ruleReverse
+
 	return result
 }
 

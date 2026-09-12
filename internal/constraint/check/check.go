@@ -231,33 +231,15 @@ func evaluateConstraint(
 func boolState(
 	resolved enginevalue.Resolved,
 ) (bool, bool, error) {
-	if !resolved.IsValid() {
-		return false,
-			false,
-			newError(
-				ErrorInvariantViolation,
-				"Constraint expression produced an invalid resolved value",
-				nil,
-			)
+	decision, indeterminate, err := evaluator.InterpretScalarBool(resolved)
+	if err != nil {
+		return false, false, newError(
+			ErrorInvariantViolation,
+			"committed Constraint expression did not evaluate to unitless Bool",
+			err,
+		)
 	}
-
-	if resolved.IsNull() || resolved.IsUndefined() {
-		return false, true, nil
-	}
-
-	typed := resolved.Value()
-
-	if typed.Type() != enginevalue.Bool || typed.HasUnit() {
-		return false,
-			false,
-			newError(
-				ErrorInvariantViolation,
-				"committed Constraint expression did not evaluate to unitless Bool",
-				nil,
-			)
-	}
-
-	return typed.Raw().Bool(), false, nil
+	return decision, indeterminate, nil
 }
 
 func compareUUID(

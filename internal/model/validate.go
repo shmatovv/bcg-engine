@@ -25,7 +25,7 @@ import (
 //  9. stored expression typing;
 //
 // 10. Constraint expression typing;
-// 11. Rule condition/effect validation;
+// 11. Rule condition validation;
 // 12. concrete value dependency extraction and cycle detection;
 // 13. base value bindings.
 func (d *Draft) Validate() ValidationReport {
