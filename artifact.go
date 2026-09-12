@@ -19,6 +19,24 @@ const EngineCompatibility = formatbcg.EngineCompatibilityV1
 // Artifact is one portable committed Model and its optional immutable Scenario overlays.
 type Artifact struct{ value formatbcg.Artifact }
 
+// NewArtifact constructs a portable Artifact from a committed Model and zero
+// or more immutable Scenarios. Every Scenario must belong to exactly that
+// model version and pass the established Scenario validation rules.
+func NewArtifact(model Model, scenarios ...Scenario) (Artifact, error) {
+	if !model.IsValid() {
+		return Artifact{}, fmt.Errorf("%w: committed model is required", ErrInvalidArgument)
+	}
+	values := make([]scenario.Scenario, len(scenarios))
+	for index, candidate := range scenarios {
+		values[index] = candidate.value
+	}
+	artifact, err := formatbcg.NewArtifact(model.name, model.version, values)
+	if err != nil {
+		return Artifact{}, publicError(err)
+	}
+	return Artifact{value: artifact}, nil
+}
+
 // Decode reads one .bcg artifact from r.
 func Decode(r io.Reader) (Artifact, error) {
 	decoded, err := formatbcg.Decode(r)

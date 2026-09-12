@@ -277,6 +277,191 @@ func TestPublicOwnershipAndInvalidValues(t *testing.T) {
 	}
 }
 
+func TestPublicAuthoringLifecycle(t *testing.T) {
+	modelID := bcg.MustParseID("00000000-0000-4000-8000-000000000101")
+	version1ID := bcg.MustParseID("00000000-0000-4000-8000-000000000102")
+	version2ID := bcg.MustParseID("00000000-0000-4000-8000-000000000103")
+	policy, err := bcg.NewPrecisionPolicy(8, bcg.RoundHalfEven)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	logical, err := bcg.NewModel(modelID, "public-authored")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !logical.IsLogical() || logical.IsValid() || !logical.ModelID().Equal(modelID) {
+		t.Fatalf("new logical model = %#v", logical)
+	}
+
+	draft, err := logical.NewDraft()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !draft.IsValid() {
+		t.Fatal("new Draft is invalid")
+	}
+	if _, hasParent := draft.ParentVersionID(); hasParent {
+		t.Fatal("new Draft unexpectedly has a parent")
+	}
+	report, err := draft.Validate()
+	if err != nil || !report.OK() || report.Len() != 0 || len(report.Issues()) != 0 {
+		t.Fatalf("new Draft.Validate = %#v, %v", report, err)
+	}
+
+	options1, err := bcg.NewCommitOptions(version1ID, "v1", policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	v1, err := draft.Commit(options1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !v1.IsValid() || !v1.ModelID().Equal(modelID) || !v1.VersionID().Equal(version1ID) {
+		t.Fatalf("v1 = %#v", v1)
+	}
+	if _, hasParent := v1.ParentVersionID(); hasParent {
+		t.Fatal("v1 unexpectedly has a parent")
+	}
+	if got, ok := v1.PrecisionPolicy(); !ok || got.Scale() != 8 || got.Rounding() != bcg.RoundHalfEven {
+		t.Fatalf("v1 precision policy = %#v, %v", got, ok)
+	}
+
+	artifact, err := bcg.NewArtifact(v1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := bcg.Marshal(artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := bcg.Unmarshal(encoded)
+	if err != nil || !decoded.Model().IsValid() || !decoded.Model().VersionID().Equal(version1ID) {
+		t.Fatalf("Marshal/Unmarshal = %#v, %v", decoded, err)
+	}
+
+	edit, err := v1.Edit()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parent, ok := edit.ParentVersionID(); !ok || !parent.Equal(version1ID) {
+		t.Fatalf("edit parent = %s, %v", parent, ok)
+	}
+	if err := edit.SetName("public-authored-renamed"); err != nil {
+		t.Fatal(err)
+	}
+	options2, err := bcg.NewCommitOptions(version2ID, "v2", policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	v2, err := edit.Commit(options2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !v2.IsValid() || !v2.ModelID().Equal(modelID) || !v2.VersionID().Equal(version2ID) {
+		t.Fatalf("v2 = %#v", v2)
+	}
+	if parent, ok := v2.ParentVersionID(); !ok || !parent.Equal(version1ID) {
+		t.Fatalf("v2 parent = %s, %v", parent, ok)
+	}
+	if v1.Name() != "public-authored" || v1.VersionLabel() != "v1" || v1.VersionID() != version1ID {
+		t.Fatalf("v1 mutated after v2 commit: %#v", v1)
+	}
+	if v2.Name() != "public-authored-renamed" || v2.VersionLabel() != "v2" {
+		t.Fatalf("v2 metadata = %#v", v2)
+	}
+
+	failed, err := v1.Edit()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := failed.SetName("failed-rename"); err != nil {
+		t.Fatal(err)
+	}
+	parentIDOptions, err := bcg.NewCommitOptions(version1ID, "must-fail", policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := failed.Commit(parentIDOptions); !errors.Is(err, bcg.ErrInvalidArgument) {
+		t.Fatalf("commit with parent version ID = %T %[1]v", err)
+	}
+	if failed.Name() != "failed-rename" || v1.Name() != "public-authored" || !v1.VersionID().Equal(version1ID) {
+		t.Fatal("failed Commit mutated the Draft or its source Model")
+	}
+
+	var invalid bcg.Draft
+	if _, err := invalid.Validate(); !errors.Is(err, bcg.ErrInvalidArgument) {
+		t.Fatalf("zero Draft.Validate = %T %[1]v", err)
+	}
+	if _, err := invalid.Commit(options1); !errors.Is(err, bcg.ErrInvalidArgument) {
+		t.Fatalf("zero Draft.Commit = %T %[1]v", err)
+	}
+
+	source, err := bcg.Unmarshal([]byte(publicArtifact))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sourceModel := source.Model()
+	contentEdit, err := sourceModel.Edit()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := contentEdit.SetName("public-fixture-v2"); err != nil {
+		t.Fatal(err)
+	}
+	sourcePolicy, ok := sourceModel.PrecisionPolicy()
+	if !ok {
+		t.Fatal("source Model has no precision policy")
+	}
+	contentOptions, err := bcg.NewCommitOptions(
+		bcg.MustParseID("00000000-0000-4000-8000-000000000104"),
+		"v2",
+		sourcePolicy,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	contentV2, err := contentEdit.Commit(contentOptions)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parent, ok := contentV2.ParentVersionID(); !ok || !parent.Equal(sourceModel.VersionID()) {
+		t.Fatalf("copied-content v2 parent = %s, %v", parent, ok)
+	}
+	if sourceModel.Name() != "public-fixture" || sourceModel.VersionLabel() != "v1" {
+		t.Fatalf("source Model changed during content edit: %#v", sourceModel)
+	}
+	target, err := bcg.EntityProperty(
+		bcg.MustParseID("00000000-0000-4000-8000-000000000005"),
+		bcg.MustParseID("00000000-0000-4000-8000-000000000004"),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	at, err := bcg.ParseDateTime("2026-01-02T03:04:05Z")
+	if err != nil {
+		t.Fatal(err)
+	}
+	context, err := bcg.NewCalculationContextAt(at)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := contentV2.Evaluate(target, context)
+	if err != nil || result.State() != bcg.Defined {
+		t.Fatalf("edited copied-content evaluation = %#v, %v", result, err)
+	}
+	scenario, ok := source.Scenario(bcg.MustParseID("00000000-0000-4000-8000-000000000008"))
+	if !ok {
+		t.Fatal("fixture Scenario missing")
+	}
+	if _, err := bcg.NewArtifact(source.Model(), scenario); err != nil {
+		t.Fatalf("compatible Scenario rejected: %v", err)
+	}
+	if _, err := bcg.NewArtifact(v1, scenario); !errors.Is(err, bcg.ErrScenarioValidation) {
+		t.Fatalf("foreign Scenario accepted or wrong error: %T %[1]v", err)
+	}
+}
+
 func TestPublicAggregateAndScopeTimeWorkflow(t *testing.T) {
 	aggregate, err := bcg.Unmarshal([]byte(publicAggregateArtifact))
 	if err != nil {

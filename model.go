@@ -7,6 +7,7 @@ import (
 	constraintcheck "github.com/shmatovv/bcg-engine/internal/constraint/check"
 	"github.com/shmatovv/bcg-engine/internal/constraint/feasibility"
 	"github.com/shmatovv/bcg-engine/internal/domain/address"
+	"github.com/shmatovv/bcg-engine/internal/domain/identity"
 	"github.com/shmatovv/bcg-engine/internal/domain/schema"
 	"github.com/shmatovv/bcg-engine/internal/evaluator"
 	"github.com/shmatovv/bcg-engine/internal/impact"
@@ -16,26 +17,34 @@ import (
 	"github.com/shmatovv/bcg-engine/internal/runtime"
 )
 
-// Model is one immutable, committed calculation model version.
-// It is obtained from Artifact; programmatic model authoring remains outside
-// the public consumption API v1.
+// Model identifies one logical calculation model and, when committed, one
+// immutable calculation-model version.
+//
+// NewModel creates an uncommitted logical model identity. A Model returned by
+// Artifact, Unmarshal, or Draft.Commit is committed and can be evaluated.
 type Model struct {
+	modelID identity.UUID
 	name    string
 	version model.ModelVersion
 }
 
 func newModel(name string, version model.ModelVersion) Model {
-	return Model{name: name, version: version}
+	return Model{modelID: version.ModelID(), name: name, version: version}
 }
 
 // IsValid reports whether m wraps a committed immutable model version.
-func (m Model) IsValid() bool { return m.name != "" && m.version.IsCommitted() }
+func (m Model) IsValid() bool {
+	return !m.modelID.IsZero() &&
+		m.name != "" &&
+		m.version.IsCommitted() &&
+		m.version.ModelID() == m.modelID
+}
 
 // Name returns the long-lived model presentation name.
 func (m Model) Name() string { return m.name }
 
 // ModelID returns the long-lived model UUID.
-func (m Model) ModelID() ID { return idFromInternal(m.version.ModelID()) }
+func (m Model) ModelID() ID { return idFromInternal(m.modelID) }
 
 // VersionID returns this immutable model-version UUID.
 func (m Model) VersionID() ID { return idFromInternal(m.version.ID()) }

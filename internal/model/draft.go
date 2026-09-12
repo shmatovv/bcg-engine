@@ -2,6 +2,7 @@ package model
 
 import (
 	"github.com/shmatovv/bcg-engine/internal/domain/constraint"
+	"github.com/shmatovv/bcg-engine/internal/domain/identity"
 	"github.com/shmatovv/bcg-engine/internal/domain/rule"
 	"github.com/shmatovv/bcg-engine/internal/domain/schema"
 	"github.com/shmatovv/bcg-engine/internal/domain/scope"
@@ -40,6 +41,37 @@ type Draft struct {
 // NewDraft constructs an empty model draft.
 func NewDraft() *Draft {
 	return &Draft{}
+}
+
+// NewDraftFromVersion constructs an independent editable copy of a committed
+// model version.
+//
+// The returned Draft owns copies of every top-level collection. Domain values
+// stored in those collections are immutable, so this is sufficient to keep
+// subsequent Draft changes isolated from the committed snapshot. Commit makes
+// another defensive snapshot before publishing its result.
+//
+// NewDraftFromVersion panics when version is not committed. As with
+// NewDraft, this is an internal domain-construction boundary; public callers
+// are protected by the root facade before reaching it.
+func NewDraftFromVersion(version ModelVersion) *Draft {
+	if !version.IsCommitted() {
+		panic("model: draft source version must be committed")
+	}
+
+	return &Draft{
+		entityTypes:         version.EntityTypes(),
+		relationTypes:       version.RelationTypes(),
+		traits:              version.Traits(),
+		propertyContracts:   version.PropertyContracts(),
+		propertyDefinitions: version.PropertyDefinitions(),
+		scopeDefinitions:    version.ScopeDefinitions(),
+		entities:            version.Entities(),
+		relations:           version.Relations(),
+		valueBindings:       version.ValueBindings(),
+		constraints:         version.Constraints(),
+		rules:               version.Rules(),
+	}
 }
 
 func (d *Draft) AddEntityType(
@@ -163,6 +195,226 @@ func (d *Draft) AddRule(
 		d.rules,
 		modelRule,
 	)
+}
+
+// The replacement and removal operations below are deliberately tolerant of
+// invalid replacement values. Draft is an authoring workspace, so a caller
+// may replace a previously valid object with an incomplete one, inspect the
+// resulting validation issues, and repair it before Commit. Identity selects
+// the existing slot; it is not required to equal the replacement's identity.
+// This makes the operations usable for both updates and deliberate invalid
+// intermediate authoring states.
+
+// ReplaceEntityType replaces the EntityType currently identified by id.
+func (d *Draft) ReplaceEntityType(id identity.UUID, value schema.EntityType) bool {
+	d.requireNonNil()
+	var replaced bool
+	d.entityTypes, replaced = replaceDraftItem(d.entityTypes, id, value, func(item schema.EntityType) identity.UUID { return item.ID() })
+	return replaced
+}
+
+// RemoveEntityType removes the EntityType identified by id.
+func (d *Draft) RemoveEntityType(id identity.UUID) bool {
+	d.requireNonNil()
+	var removed bool
+	d.entityTypes, removed = removeDraftItem(d.entityTypes, id, func(item schema.EntityType) identity.UUID { return item.ID() })
+	return removed
+}
+
+// ReplaceRelationType replaces the RelationType currently identified by id.
+func (d *Draft) ReplaceRelationType(id identity.UUID, value schema.RelationType) bool {
+	d.requireNonNil()
+	var replaced bool
+	d.relationTypes, replaced = replaceDraftItem(d.relationTypes, id, value, func(item schema.RelationType) identity.UUID { return item.ID() })
+	return replaced
+}
+
+// RemoveRelationType removes the RelationType identified by id.
+func (d *Draft) RemoveRelationType(id identity.UUID) bool {
+	d.requireNonNil()
+	var removed bool
+	d.relationTypes, removed = removeDraftItem(d.relationTypes, id, func(item schema.RelationType) identity.UUID { return item.ID() })
+	return removed
+}
+
+// ReplaceTrait replaces the Trait currently identified by id.
+func (d *Draft) ReplaceTrait(id identity.UUID, value schema.Trait) bool {
+	d.requireNonNil()
+	var replaced bool
+	d.traits, replaced = replaceDraftItem(d.traits, id, value, func(item schema.Trait) identity.UUID { return item.ID() })
+	return replaced
+}
+
+// RemoveTrait removes the Trait identified by id.
+func (d *Draft) RemoveTrait(id identity.UUID) bool {
+	d.requireNonNil()
+	var removed bool
+	d.traits, removed = removeDraftItem(d.traits, id, func(item schema.Trait) identity.UUID { return item.ID() })
+	return removed
+}
+
+// ReplacePropertyContract replaces the PropertyContract currently identified by id.
+func (d *Draft) ReplacePropertyContract(id identity.UUID, value schema.PropertyContract) bool {
+	d.requireNonNil()
+	var replaced bool
+	d.propertyContracts, replaced = replaceDraftItem(d.propertyContracts, id, value, func(item schema.PropertyContract) identity.UUID { return item.ID() })
+	return replaced
+}
+
+// RemovePropertyContract removes the PropertyContract identified by id.
+func (d *Draft) RemovePropertyContract(id identity.UUID) bool {
+	d.requireNonNil()
+	var removed bool
+	d.propertyContracts, removed = removeDraftItem(d.propertyContracts, id, func(item schema.PropertyContract) identity.UUID { return item.ID() })
+	return removed
+}
+
+// ReplacePropertyDefinition replaces the PropertyDefinition currently identified by id.
+func (d *Draft) ReplacePropertyDefinition(id identity.UUID, value schema.PropertyDefinition) bool {
+	d.requireNonNil()
+	var replaced bool
+	d.propertyDefinitions, replaced = replaceDraftItem(d.propertyDefinitions, id, value, func(item schema.PropertyDefinition) identity.UUID { return item.ID() })
+	return replaced
+}
+
+// RemovePropertyDefinition removes the PropertyDefinition identified by id.
+func (d *Draft) RemovePropertyDefinition(id identity.UUID) bool {
+	d.requireNonNil()
+	var removed bool
+	d.propertyDefinitions, removed = removeDraftItem(d.propertyDefinitions, id, func(item schema.PropertyDefinition) identity.UUID { return item.ID() })
+	return removed
+}
+
+// ReplaceScopeDefinition replaces the Scope Definition currently identified by id.
+func (d *Draft) ReplaceScopeDefinition(id identity.UUID, value scope.Definition) bool {
+	d.requireNonNil()
+	var replaced bool
+	d.scopeDefinitions, replaced = replaceDraftItem(d.scopeDefinitions, id, value, func(item scope.Definition) identity.UUID { return item.ID() })
+	return replaced
+}
+
+// RemoveScopeDefinition removes the Scope Definition identified by id.
+func (d *Draft) RemoveScopeDefinition(id identity.UUID) bool {
+	d.requireNonNil()
+	var removed bool
+	d.scopeDefinitions, removed = removeDraftItem(d.scopeDefinitions, id, func(item scope.Definition) identity.UUID { return item.ID() })
+	return removed
+}
+
+// ReplaceEntity replaces the Entity currently identified by id.
+func (d *Draft) ReplaceEntity(id identity.UUID, value semantic.Entity) bool {
+	d.requireNonNil()
+	var replaced bool
+	d.entities, replaced = replaceDraftItem(d.entities, id, value, func(item semantic.Entity) identity.UUID { return item.ID() })
+	return replaced
+}
+
+// RemoveEntity removes the Entity identified by id.
+func (d *Draft) RemoveEntity(id identity.UUID) bool {
+	d.requireNonNil()
+	var removed bool
+	d.entities, removed = removeDraftItem(d.entities, id, func(item semantic.Entity) identity.UUID { return item.ID() })
+	return removed
+}
+
+// ReplaceRelation replaces the Relation currently identified by id.
+func (d *Draft) ReplaceRelation(id identity.UUID, value semantic.Relation) bool {
+	d.requireNonNil()
+	var replaced bool
+	d.relations, replaced = replaceDraftItem(d.relations, id, value, func(item semantic.Relation) identity.UUID { return item.ID() })
+	return replaced
+}
+
+// RemoveRelation removes the Relation identified by id.
+func (d *Draft) RemoveRelation(id identity.UUID) bool {
+	d.requireNonNil()
+	var removed bool
+	d.relations, removed = removeDraftItem(d.relations, id, func(item semantic.Relation) identity.UUID { return item.ID() })
+	return removed
+}
+
+// ReplaceValueBinding replaces the binding at index. The index comes from a
+// previous ValueBindings result and remains stable until this Draft's binding
+// collection is changed.
+func (d *Draft) ReplaceValueBinding(index int, value semantic.ValueBinding) bool {
+	d.requireNonNil()
+	if index < 0 || index >= len(d.valueBindings) {
+		return false
+	}
+	d.valueBindings[index] = value
+	return true
+}
+
+// RemoveValueBinding removes the binding at index.
+func (d *Draft) RemoveValueBinding(index int) bool {
+	d.requireNonNil()
+	if index < 0 || index >= len(d.valueBindings) {
+		return false
+	}
+	copy(d.valueBindings[index:], d.valueBindings[index+1:])
+	d.valueBindings[len(d.valueBindings)-1] = semantic.ValueBinding{}
+	d.valueBindings = d.valueBindings[:len(d.valueBindings)-1]
+	return true
+}
+
+// ReplaceConstraint replaces the Constraint currently identified by id.
+func (d *Draft) ReplaceConstraint(id identity.UUID, value constraint.Constraint) bool {
+	d.requireNonNil()
+	var replaced bool
+	d.constraints, replaced = replaceDraftItem(d.constraints, id, value, func(item constraint.Constraint) identity.UUID { return item.ID() })
+	return replaced
+}
+
+// RemoveConstraint removes the Constraint identified by id.
+func (d *Draft) RemoveConstraint(id identity.UUID) bool {
+	d.requireNonNil()
+	var removed bool
+	d.constraints, removed = removeDraftItem(d.constraints, id, func(item constraint.Constraint) identity.UUID { return item.ID() })
+	return removed
+}
+
+// ReplaceRule replaces the Rule currently identified by id.
+func (d *Draft) ReplaceRule(id identity.UUID, value rule.Rule) bool {
+	d.requireNonNil()
+	var replaced bool
+	d.rules, replaced = replaceDraftItem(d.rules, id, value, func(item rule.Rule) identity.UUID { return item.ID() })
+	return replaced
+}
+
+// RemoveRule removes the Rule identified by id.
+func (d *Draft) RemoveRule(id identity.UUID) bool {
+	d.requireNonNil()
+	var removed bool
+	d.rules, removed = removeDraftItem(d.rules, id, func(item rule.Rule) identity.UUID { return item.ID() })
+	return removed
+}
+
+func replaceDraftItem[T any](items []T, id identity.UUID, replacement T, itemID func(T) identity.UUID) ([]T, bool) {
+	if id.IsZero() {
+		return items, false
+	}
+	for index, item := range items {
+		if itemID(item) == id {
+			items[index] = replacement
+			return items, true
+		}
+	}
+	return items, false
+}
+
+func removeDraftItem[T any](items []T, id identity.UUID, itemID func(T) identity.UUID) ([]T, bool) {
+	if id.IsZero() {
+		return items, false
+	}
+	for index, item := range items {
+		if itemID(item) == id {
+			copy(items[index:], items[index+1:])
+			var zero T
+			items[len(items)-1] = zero
+			return items[:len(items)-1], true
+		}
+	}
+	return items, false
 }
 
 func (d *Draft) EntityTypes() []schema.EntityType {

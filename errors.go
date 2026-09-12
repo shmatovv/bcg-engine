@@ -59,12 +59,27 @@ func (i ValidationIssue) RelatedID() (ID, bool) { return i.relatedID, i.hasRelat
 // Message provides a human-readable diagnostic.
 func (i ValidationIssue) Message() string { return i.message }
 
-// ValidationError retains validation issues from untrusted .bcg input.
-// It supports errors.Is for the underlying codec category and errors.As for
-// this public type.
+// ValidationError retains validation issues from a rejected artifact or Draft
+// commit. It supports errors.Is for the underlying codec category and errors.As
+// for this public type.
 type ValidationError struct {
 	cause  error
 	issues []ValidationIssue
+}
+
+// ValidationReport is the deterministic result of validating a Draft.
+// A report with no issues is valid. It owns its issue slice.
+type ValidationReport struct{ issues []ValidationIssue }
+
+// OK reports whether validation found no issues.
+func (r ValidationReport) OK() bool { return len(r.issues) == 0 }
+
+// Len returns the number of validation issues.
+func (r ValidationReport) Len() int { return len(r.issues) }
+
+// Issues returns an owned copy of the issues in deterministic order.
+func (r ValidationReport) Issues() []ValidationIssue {
+	return append([]ValidationIssue(nil), r.issues...)
 }
 
 // Error implements error.
@@ -118,18 +133,7 @@ func publicError(err error) error {
 	}
 	var report model.ValidationReport
 	if errors.As(err, &report) {
-		issues := report.Issues()
-		public := make([]ValidationIssue, len(issues))
-		for index, issue := range issues {
-			public[index] = ValidationIssue{kind: issue.Kind().String(), message: issue.Message()}
-			if subject, ok := issue.SubjectID(); ok {
-				public[index].subjectID, public[index].hasSubject = idFromInternal(subject), true
-			}
-			if related, ok := issue.RelatedID(); ok {
-				public[index].relatedID, public[index].hasRelated = idFromInternal(related), true
-			}
-		}
-		return &ValidationError{cause: err, issues: public}
+		return &ValidationError{cause: err, issues: validationIssuesFromInternal(report.Issues())}
 	}
 	var evaluation evaluator.Error
 	if errors.As(err, &evaluation) {
@@ -152,4 +156,22 @@ func publicError(err error) error {
 		return &EngineError{kind: resolved.Kind().String(), cause: err}
 	}
 	return err
+}
+
+func validationReportFromInternal(report model.ValidationReport) ValidationReport {
+	return ValidationReport{issues: validationIssuesFromInternal(report.Issues())}
+}
+
+func validationIssuesFromInternal(issues []model.ValidationIssue) []ValidationIssue {
+	public := make([]ValidationIssue, len(issues))
+	for index, issue := range issues {
+		public[index] = ValidationIssue{kind: issue.Kind().String(), message: issue.Message()}
+		if subject, ok := issue.SubjectID(); ok {
+			public[index].subjectID, public[index].hasSubject = idFromInternal(subject), true
+		}
+		if related, ok := issue.RelatedID(); ok {
+			public[index].relatedID, public[index].hasRelated = idFromInternal(related), true
+		}
+	}
+	return public
 }
