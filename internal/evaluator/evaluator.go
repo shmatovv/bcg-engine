@@ -222,9 +222,23 @@ type evaluationState struct {
 
 	effectivePlan plan.Plan
 
+	// memo records values used by this one recursive evaluation. It preserves
+	// per-call occurrence semantics even when a Session supplies a shared
+	// property cache below.
 	memo map[address.PropertyAddress]Result
 
+	cache propertyResultCache
+
 	visiting map[address.PropertyAddress]struct{}
+}
+
+// propertyResultCache is the narrow runtime hook used by EvaluationSession.
+// Caching only concrete PropertyAddress results keeps lexical aggregate
+// bindings out of cache identity and leaves all AST semantics in this
+// evaluator unchanged.
+type propertyResultCache interface {
+	Load(address.PropertyAddress) (Result, bool)
+	Store(address.PropertyAddress, Result)
 }
 
 func (s *evaluationState) evaluateProperty(
@@ -234,6 +248,13 @@ func (s *evaluationState) evaluateProperty(
 		s.memo[target]; ok {
 
 		return result, nil
+	}
+
+	if s.cache != nil {
+		if result, ok := s.cache.Load(target); ok {
+			s.memo[target] = result
+			return result, nil
+		}
 	}
 
 	planNode, ok :=
@@ -331,8 +352,7 @@ func (s *evaluationState) evaluateProperty(
 				resultErr
 		}
 
-		s.memo[target] =
-			result
+		s.remember(target, result)
 
 		return result, nil
 
@@ -361,8 +381,7 @@ func (s *evaluationState) evaluateProperty(
 				resolveErr
 		}
 
-		s.memo[target] =
-			result
+		s.remember(target, result)
 
 		return result, nil
 
@@ -432,8 +451,7 @@ func (s *evaluationState) evaluateProperty(
 				),
 			)
 
-		s.memo[target] =
-			result
+		s.remember(target, result)
 
 		return result, nil
 
@@ -444,6 +462,17 @@ func (s *evaluationState) evaluateProperty(
 				"Effective Evaluation Plan contains an invalid node kind",
 				nil,
 			)
+	}
+}
+
+func (s *evaluationState) remember(target address.PropertyAddress, result Result) {
+	if !target.IsValid() || !result.IsValid() {
+		panic("evaluator: attempted to cache invalid property result")
+	}
+
+	s.memo[target] = result
+	if s.cache != nil {
+		s.cache.Store(target, result)
 	}
 }
 

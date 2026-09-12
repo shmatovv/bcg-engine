@@ -131,3 +131,19 @@ func (v Values) IsValid() bool {
 
 	return true
 }
+
+// Equal reports semantic equality of two immutable selected scope contexts.
+func (v Values) Equal(other Values) bool {
+	if !v.IsValid() || !other.IsValid() || len(v.selectors) != len(other.selectors) {
+		return false
+	}
+
+	for index := range v.selectors {
+		left, right := v.selectors[index], other.selectors[index]
+		if left.DefinitionID() != right.DefinitionID() || !left.Value().Equal(right.Value()) {
+			return false
+		}
+	}
+
+	return true
+}

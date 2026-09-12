@@ -7,6 +7,7 @@ import (
 	"github.com/shmatovv/bcg-engine/internal/domain/identity"
 	domaintime "github.com/shmatovv/bcg-engine/internal/domain/time"
 	"github.com/shmatovv/bcg-engine/internal/evaluator"
+	"github.com/shmatovv/bcg-engine/internal/expression/ast"
 	"github.com/shmatovv/bcg-engine/internal/model"
 	resolvervalue "github.com/shmatovv/bcg-engine/internal/resolver/value"
 	"github.com/shmatovv/bcg-engine/internal/runtime"
@@ -39,6 +40,36 @@ func One(
 		version,
 		modelConstraint,
 		context,
+	)
+}
+
+// OneWithSession evaluates one Constraint through a shared evaluator Session.
+// It retains the ordinary Constraint decision semantics while allowing its
+// concrete property reads to be reused with Rules and other Constraints.
+func OneWithSession(
+	session *evaluator.Session,
+	constraintID identity.UUID,
+	context runtime.CalculationContext,
+) (Result, error) {
+	if session == nil {
+		return Result{}, newError(ErrorInvalidModelVersion, "evaluation Session is nil", nil)
+	}
+
+	version := session.ModelVersion()
+	if err := validateRequest(version, context); err != nil {
+		return Result{}, err
+	}
+
+	modelConstraint, ok := version.Constraint(constraintID)
+	if !ok || !modelConstraint.IsValid() {
+		return Result{}, newError(ErrorConstraintNotFound, "Constraint could not be resolved from committed ModelVersion", nil)
+	}
+
+	return evaluateConstraintWithExpressionEvaluator(
+		version,
+		modelConstraint,
+		context,
+		session.EvaluateExpression,
 	)
 }
 
@@ -81,6 +112,43 @@ func All(
 			return Report{}, err
 		}
 
+		results = append(results, result)
+	}
+
+	return newReport(results), nil
+}
+
+// AllWithSession evaluates every Constraint in deterministic UUID order using
+// one shared evaluator Session.
+func AllWithSession(
+	session *evaluator.Session,
+	context runtime.CalculationContext,
+) (Report, error) {
+	if session == nil {
+		return Report{}, newError(ErrorInvalidModelVersion, "evaluation Session is nil", nil)
+	}
+
+	version := session.ModelVersion()
+	if err := validateRequest(version, context); err != nil {
+		return Report{}, err
+	}
+
+	constraints := version.Constraints()
+	sort.Slice(constraints, func(i, j int) bool {
+		return compareUUID(constraints[i].ID(), constraints[j].ID()) < 0
+	})
+
+	results := make([]Result, 0, len(constraints))
+	for _, modelConstraint := range constraints {
+		result, err := evaluateConstraintWithExpressionEvaluator(
+			version,
+			modelConstraint,
+			context,
+			session.EvaluateExpression,
+		)
+		if err != nil {
+			return Report{}, err
+		}
 		results = append(results, result)
 	}
 
@@ -131,12 +199,27 @@ func evaluateConstraint(
 	modelConstraint constraint.Constraint,
 	context runtime.CalculationContext,
 ) (Result, error) {
+	return evaluateConstraintWithExpressionEvaluator(
+		version,
+		modelConstraint,
+		context,
+		func(expression ast.Expression, context runtime.CalculationContext) (evaluator.Result, error) {
+			return evaluator.EvaluateExpression(version, expression, context)
+		},
+	)
+}
+
+func evaluateConstraintWithExpressionEvaluator(
+	version model.ModelVersion,
+	modelConstraint constraint.Constraint,
+	context runtime.CalculationContext,
+	evaluate func(ast.Expression, runtime.CalculationContext) (evaluator.Result, error),
+) (Result, error) {
 	var applicabilityResult evaluator.Result
 	hasApplicabilityResult := false
 
 	if applicability, hasApplicability := modelConstraint.Applicability(); hasApplicability {
-		result, err := evaluator.EvaluateExpression(
-			version,
+		result, err := evaluate(
 			applicability,
 			context,
 		)
@@ -180,8 +263,7 @@ func evaluateConstraint(
 		}
 	}
 
-	assertionResult, err := evaluator.EvaluateExpression(
-		version,
+	assertionResult, err := evaluate(
 		modelConstraint.Assertion(),
 		context,
 	)

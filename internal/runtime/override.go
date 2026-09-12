@@ -51,3 +51,9 @@ func (o Override) IsValid() bool {
 	return o.target.IsValid() &&
 		o.value.IsValid()
 }
+
+// Equal reports semantic equality of immutable calculation overrides.
+func (o Override) Equal(other Override) bool {
+	return o.IsValid() && other.IsValid() &&
+		o.target == other.target && o.value.Equal(other.value)
+}

@@ -5,6 +5,7 @@ import (
 	"github.com/shmatovv/bcg-engine/internal/constraint/check"
 	"github.com/shmatovv/bcg-engine/internal/domain/constraint"
 	"github.com/shmatovv/bcg-engine/internal/domain/identity"
+	"github.com/shmatovv/bcg-engine/internal/evaluator"
 	"github.com/shmatovv/bcg-engine/internal/model"
 	"github.com/shmatovv/bcg-engine/internal/runtime"
 )
@@ -57,6 +58,16 @@ type Result struct {
 // errors.
 func Evaluate(version model.ModelVersion, context runtime.CalculationContext) (Result, error) {
 	report, err := check.All(version, context)
+	if err != nil {
+		return Result{}, err
+	}
+	return Assess(report), nil
+}
+
+// EvaluateWithSession derives feasibility from Constraint checks performed
+// through one shared evaluator Session.
+func EvaluateWithSession(session *evaluator.Session, context runtime.CalculationContext) (Result, error) {
+	report, err := check.AllWithSession(session, context)
 	if err != nil {
 		return Result{}, err
 	}

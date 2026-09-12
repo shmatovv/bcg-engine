@@ -180,6 +180,61 @@ func (s Series) Intervals() []Interval {
 	return append([]Interval(nil), s.intervals...)
 }
 
+// Equal reports whether s and other carry exactly the same immutable source
+// series data. It deliberately compares samples as well as axis metadata;
+// AxisEqual is the narrower operation for expression compatibility checks.
+func (s Series) Equal(other Series) bool {
+	if !s.IsValid() || !other.IsValid() ||
+		s.axisKind != other.axisKind ||
+		s.elementType != other.elementType ||
+		s.hasUnit != other.hasUnit {
+		return false
+	}
+
+	if s.hasUnit && !s.unit.Equal(other.unit) {
+		return false
+	}
+
+	equalSample := func(left, right Sample) bool {
+		if left.IsNull() || right.IsNull() {
+			return left.IsNull() && right.IsNull()
+		}
+		leftValue, leftOK := left.Value()
+		rightValue, rightOK := right.Value()
+		return leftOK && rightOK && leftValue.Equal(rightValue)
+	}
+
+	switch s.axisKind {
+	case AxisPoint:
+		if len(s.points) != len(other.points) {
+			return false
+		}
+		for index := range s.points {
+			left, right := s.points[index], other.points[index]
+			if !left.at.Equal(right.at) || !equalSample(left.sample, right.sample) {
+				return false
+			}
+		}
+		return true
+
+	case AxisInterval:
+		if len(s.intervals) != len(other.intervals) {
+			return false
+		}
+		for index := range s.intervals {
+			left, right := s.intervals[index], other.intervals[index]
+			if !left.from.Equal(right.from) || !left.to.Equal(right.to) ||
+				!equalSample(left.sample, right.sample) {
+				return false
+			}
+		}
+		return true
+
+	default:
+		return false
+	}
+}
+
 // AxisEqual reports exact axis equality. It does not compare element values,
 // types, or units.
 func (s Series) AxisEqual(other Series) bool {

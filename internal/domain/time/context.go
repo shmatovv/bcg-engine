@@ -136,3 +136,19 @@ func (c Context) IsValid() bool {
 		return false
 	}
 }
+
+// Equal reports semantic equality of two calculation time contexts.
+func (c Context) Equal(other Context) bool {
+	if !c.IsValid() || !other.IsValid() || c.kind != other.kind {
+		return false
+	}
+
+	switch c.kind {
+	case ContextAt:
+		return c.at.Equal(other.at)
+	case ContextPeriod:
+		return c.from.Equal(other.from) && c.to.Equal(other.to)
+	default:
+		return false
+	}
+}

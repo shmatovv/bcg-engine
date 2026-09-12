@@ -93,6 +93,26 @@ func (v BindingValue) IsValid() bool {
 	}
 }
 
+// Equal reports semantic equality of immutable binding values. It is useful
+// to runtime layers that must compare two calculation environments without
+// relying on pointer identity or serialization.
+func (v BindingValue) Equal(other BindingValue) bool {
+	if !v.IsValid() || !other.IsValid() || v.kind != other.kind {
+		return false
+	}
+
+	switch v.kind {
+	case BindingValueDefined:
+		return v.value.Equal(other.value)
+	case BindingValueNull:
+		return true
+	case BindingValueSeries:
+		return v.series.Equal(other.series)
+	default:
+		return false
+	}
+}
+
 // ValueBinding stores a base value candidate.
 //
 // Resolution decides whether this binding is applicable for a concrete

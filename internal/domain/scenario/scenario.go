@@ -113,6 +113,27 @@ func (s Scenario) IsValid() bool {
 	return true
 }
 
+// Equal reports semantic equality of two immutable Scenario overlays. Runtime
+// cache keys use this complete comparison rather than only Scenario ID so a
+// malformed caller-provided duplicate ID can never contaminate a cache entry.
+func (s Scenario) Equal(other Scenario) bool {
+	if !s.IsValid() || !other.IsValid() ||
+		s.id != other.id ||
+		s.name != other.name ||
+		s.baseModelVersionID != other.baseModelVersionID ||
+		len(s.overrides) != len(other.overrides) {
+		return false
+	}
+
+	for index := range s.overrides {
+		if !s.overrides[index].Equal(other.overrides[index]) {
+			return false
+		}
+	}
+
+	return true
+}
+
 // String returns a human-readable Scenario representation.
 func (s Scenario) String() string {
 	return fmt.Sprintf(

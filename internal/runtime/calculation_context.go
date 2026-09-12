@@ -227,6 +227,84 @@ func (c CalculationContext) IsValid() bool {
 	return true
 }
 
+// Equal reports full semantic equality of calculation environments. It is
+// intentionally structural: cache/runtime code must never use context pointer
+// identity, formatting, or a collision-prone fingerprint as a semantic key.
+func (c CalculationContext) Equal(other CalculationContext) bool {
+	if !c.IsValid() || !other.IsValid() ||
+		!c.timeContext.Equal(other.timeContext) ||
+		!c.scopeValues.Equal(other.scopeValues) ||
+		c.hasScenario != other.hasScenario ||
+		len(c.overrides) != len(other.overrides) {
+		return false
+	}
+
+	if c.hasScenario && !c.scenario.Equal(other.scenario) {
+		return false
+	}
+
+	for index := range c.overrides {
+		if !c.overrides[index].Equal(other.overrides[index]) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// SameNonOverrideEnvironment reports whether Scope, Time and Scenario are
+// unchanged. When true, an execution session can safely perform precise
+// dependency invalidation from the calculation override difference alone.
+func (c CalculationContext) SameNonOverrideEnvironment(other CalculationContext) bool {
+	if !c.IsValid() || !other.IsValid() ||
+		!c.timeContext.Equal(other.timeContext) ||
+		!c.scopeValues.Equal(other.scopeValues) ||
+		c.hasScenario != other.hasScenario {
+		return false
+	}
+
+	return !c.hasScenario || c.scenario.Equal(other.scenario)
+}
+
+// ChangedOverrideTargets returns the deterministic set of concrete targets
+// whose calculation override presence or value differs between c and other.
+// The returned addresses use the same canonical ordering as Overrides.
+func (c CalculationContext) ChangedOverrideTargets(other CalculationContext) []address.PropertyAddress {
+	c.requireValid()
+	other.requireValid()
+
+	result := make([]address.PropertyAddress, 0)
+	left, right := 0, 0
+	for left < len(c.overrides) || right < len(other.overrides) {
+		switch {
+		case left == len(c.overrides):
+			result = append(result, other.overrides[right].Target())
+			right++
+		case right == len(other.overrides):
+			result = append(result, c.overrides[left].Target())
+			left++
+		default:
+			comparison := comparePropertyAddress(c.overrides[left].Target(), other.overrides[right].Target())
+			switch {
+			case comparison < 0:
+				result = append(result, c.overrides[left].Target())
+				left++
+			case comparison > 0:
+				result = append(result, other.overrides[right].Target())
+				right++
+			default:
+				if !c.overrides[left].Equal(other.overrides[right]) {
+					result = append(result, c.overrides[left].Target())
+				}
+				left++
+				right++
+			}
+		}
+	}
+
+	return result
+}
+
 func (c CalculationContext) requireValid() {
 	if !c.IsValid() {
 		panic("runtime: invalid calculation context")

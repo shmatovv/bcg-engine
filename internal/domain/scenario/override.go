@@ -153,6 +153,30 @@ func (o Override) IsValid() bool {
 	return o.effectivePeriod == domaintime.EffectivePeriod{}
 }
 
+// Equal reports semantic equality of immutable Scenario overrides.
+func (o Override) Equal(other Override) bool {
+	if !o.IsValid() || !other.IsValid() ||
+		o.target != other.target ||
+		o.hasEffectivePeriod != other.hasEffectivePeriod ||
+		!o.value.Equal(other.value) ||
+		len(o.scopeSelectors) != len(other.scopeSelectors) {
+		return false
+	}
+
+	if o.hasEffectivePeriod && !o.effectivePeriod.Equal(other.effectivePeriod) {
+		return false
+	}
+
+	for index := range o.scopeSelectors {
+		left, right := o.scopeSelectors[index], other.scopeSelectors[index]
+		if left.DefinitionID() != right.DefinitionID() || !left.Value().Equal(right.Value()) {
+			return false
+		}
+	}
+
+	return true
+}
+
 func cloneAndValidateSelectors(
 	source []scope.Selector,
 ) []scope.Selector {

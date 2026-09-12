@@ -36,6 +36,51 @@ func Build(
 			)
 	}
 
+	baseGraph, err :=
+		dependency.Build(
+			version,
+		)
+
+	if err != nil {
+		return Plan{},
+			newError(
+				ErrorDependencyGraphBuild,
+				"failed to build Base Dependency Graph",
+				err,
+			)
+	}
+
+	return BuildWithDependencyGraph(
+		version,
+		baseGraph,
+		roots,
+		context,
+	)
+}
+
+// BuildWithDependencyGraph constructs a Plan using a dependency graph already
+// built from version. It exists for runtime execution layers that retain the
+// immutable graph for one ModelVersion and must not rescan every expression
+// AST on each context transition.
+//
+// The caller must provide the concrete dependency.Graph for the same committed
+// version. This package validates all roots and context/model interactions; a
+// mismatched graph is an internal invariant violation at its call site.
+func BuildWithDependencyGraph(
+	version model.ModelVersion,
+	baseGraph dependency.Graph,
+	roots []address.PropertyAddress,
+	context runtime.CalculationContext,
+) (Plan, error) {
+	if !version.IsCommitted() {
+		return Plan{},
+			newError(
+				ErrorInvalidModelVersion,
+				"Effective Evaluation Plan requires a committed ModelVersion",
+				nil,
+			)
+	}
+
 	if !context.IsValid() {
 		return Plan{},
 			newError(
@@ -45,11 +90,7 @@ func Build(
 			)
 	}
 
-	if context.
-		TimeContext().
-		Kind() !=
-		domaintime.ContextAt {
-
+	if context.TimeContext().Kind() != domaintime.ContextAt {
 		return Plan{},
 			newError(
 				ErrorUnsupportedTimeContext,
@@ -67,30 +108,11 @@ func Build(
 			)
 	}
 
-	if err :=
-		resolvervalue.ValidateContext(
-			version,
-			context,
-		); err != nil {
-
+	if err := resolvervalue.ValidateContext(version, context); err != nil {
 		return Plan{},
 			newError(
 				ErrorInvalidCalculationContext,
 				"CalculationContext is not valid for the committed ModelVersion",
-				err,
-			)
-	}
-
-	baseGraph, err :=
-		dependency.Build(
-			version,
-		)
-
-	if err != nil {
-		return Plan{},
-			newError(
-				ErrorDependencyGraphBuild,
-				"failed to build Base Dependency Graph",
 				err,
 			)
 	}

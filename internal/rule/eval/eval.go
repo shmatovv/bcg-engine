@@ -7,6 +7,7 @@ import (
 	domainrule "github.com/shmatovv/bcg-engine/internal/domain/rule"
 	domaintime "github.com/shmatovv/bcg-engine/internal/domain/time"
 	"github.com/shmatovv/bcg-engine/internal/evaluator"
+	"github.com/shmatovv/bcg-engine/internal/expression/ast"
 	"github.com/shmatovv/bcg-engine/internal/model"
 	resolvervalue "github.com/shmatovv/bcg-engine/internal/resolver/value"
 	"github.com/shmatovv/bcg-engine/internal/runtime"
@@ -37,6 +38,30 @@ func One(
 		modelRule,
 		context,
 	)
+}
+
+// OneWithSession evaluates one Rule through a shared evaluator Session. Rule
+// states remain a pure interpretation of the ordinary evaluator Result.
+func OneWithSession(
+	session *evaluator.Session,
+	ruleID identity.UUID,
+	context runtime.CalculationContext,
+) (Result, error) {
+	if session == nil {
+		return Result{}, newError(ErrorInvalidModelVersion, "evaluation Session is nil", nil)
+	}
+
+	version := session.ModelVersion()
+	if err := validateRequest(version, context); err != nil {
+		return Result{}, err
+	}
+
+	modelRule, ok := version.Rule(ruleID)
+	if !ok || !modelRule.IsValid() {
+		return Result{}, newError(ErrorRuleNotFound, "Rule could not be resolved from committed ModelVersion", nil)
+	}
+
+	return evaluateRuleWithExpressionEvaluator(version, modelRule, context, session.EvaluateExpression)
 }
 
 // All evaluates every committed Rule in deterministic UUID order.
@@ -85,6 +110,38 @@ func All(
 	return newReport(results), nil
 }
 
+// AllWithSession evaluates every Rule in deterministic UUID order using one
+// shared evaluator Session.
+func AllWithSession(
+	session *evaluator.Session,
+	context runtime.CalculationContext,
+) (Report, error) {
+	if session == nil {
+		return Report{}, newError(ErrorInvalidModelVersion, "evaluation Session is nil", nil)
+	}
+
+	version := session.ModelVersion()
+	if err := validateRequest(version, context); err != nil {
+		return Report{}, err
+	}
+
+	rules := version.Rules()
+	sort.Slice(rules, func(i, j int) bool {
+		return compareUUID(rules[i].ID(), rules[j].ID()) < 0
+	})
+
+	results := make([]Result, 0, len(rules))
+	for _, modelRule := range rules {
+		result, err := evaluateRuleWithExpressionEvaluator(version, modelRule, context, session.EvaluateExpression)
+		if err != nil {
+			return Report{}, err
+		}
+		results = append(results, result)
+	}
+
+	return newReport(results), nil
+}
+
 // validateRequest deliberately matches the Constraint Core's At-only scalar
 // decision contract. A Period would require an explicit temporal reduction,
 // which Rule Core v1 does not define.
@@ -112,11 +169,23 @@ func evaluateRule(
 	modelRule domainrule.Rule,
 	context runtime.CalculationContext,
 ) (Result, error) {
-	condition, err := evaluator.EvaluateExpression(
+	return evaluateRuleWithExpressionEvaluator(
 		version,
-		modelRule.Condition(),
+		modelRule,
 		context,
+		func(expression ast.Expression, context runtime.CalculationContext) (evaluator.Result, error) {
+			return evaluator.EvaluateExpression(version, expression, context)
+		},
 	)
+}
+
+func evaluateRuleWithExpressionEvaluator(
+	version model.ModelVersion,
+	modelRule domainrule.Rule,
+	context runtime.CalculationContext,
+	evaluate func(ast.Expression, runtime.CalculationContext) (evaluator.Result, error),
+) (Result, error) {
+	condition, err := evaluate(modelRule.Condition(), context)
 	if err != nil {
 		return Result{},
 			newError(

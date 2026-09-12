@@ -58,6 +58,60 @@ func AnalyzeEffective(version model.ModelVersion, source address.PropertyAddress
 // appear. For Series this is a property-level union of independently recorded
 // sample paths; no sample is matched to another by array position.
 func AnalyzeObserved(version model.ModelVersion, source address.PropertyAddress, context runtime.CalculationContext) (Result, error) {
+	return analyzeObserved(
+		version,
+		source,
+		context,
+		func(targets []address.PropertyAddress) ([]evaluator.Result, error) {
+			observedPlan, err := plan.Build(version, targets, context)
+			if err != nil {
+				return nil, newError(ErrorEffectivePlanBuild, "failed to build observed scalar evaluation plan", err)
+			}
+			evaluated, err := evaluator.EvaluatePlan(version, observedPlan)
+			if err != nil {
+				return nil, newError(ErrorEvaluation, "ordinary scalar evaluation failed while observing dependencies", err)
+			}
+			results := make([]evaluator.Result, len(targets))
+			for index, target := range targets {
+				result, ok := evaluated.Result(target)
+				if !ok || !result.IsValid() {
+					return nil, newError(ErrorInvariantViolation, "observed scalar evaluation omitted a requested root", nil)
+				}
+				results[index] = result
+			}
+			return results, nil
+		},
+	)
+}
+
+// AnalyzeObservedWithSession derives observed impact from actual provenance
+// produced through a shared evaluator Session. It has the same semantic output
+// as AnalyzeObserved while reusing the Session's scalar property cache.
+func AnalyzeObservedWithSession(session *evaluator.Session, source address.PropertyAddress, context runtime.CalculationContext) (Result, error) {
+	if session == nil {
+		return Result{}, newError(ErrorInvalidModelVersion, "evaluation Session is nil", nil)
+	}
+	version := session.ModelVersion()
+	return analyzeObserved(
+		version,
+		source,
+		context,
+		func(targets []address.PropertyAddress) ([]evaluator.Result, error) {
+			results, err := session.EvaluateMany(targets, context)
+			if err != nil {
+				return nil, newError(ErrorEvaluation, "Session scalar evaluation failed while observing dependencies", err)
+			}
+			return results, nil
+		},
+	)
+}
+
+func analyzeObserved(
+	version model.ModelVersion,
+	source address.PropertyAddress,
+	context runtime.CalculationContext,
+	evaluateScalars func([]address.PropertyAddress) ([]evaluator.Result, error),
+) (Result, error) {
 	effective, err := AnalyzeEffective(version, source, context)
 	if err != nil {
 		return Result{}, err
@@ -76,21 +130,18 @@ func AnalyzeObserved(version model.ModelVersion, source address.PropertyAddress,
 			scalarTargets = append(scalarTargets, candidate.Target())
 		}
 	}
-	// Scalar roots share one ordinary evaluation state. This preserves the
-	// evaluator's semantics and avoids evaluating common upstream subgraphs
-	// once for every observed downstream target.
+	// Scalar roots share either one ordinary evaluation state or one Session
+	// cache generation. Both paths use ordinary evaluator provenance.
 	if len(scalarTargets) > 0 {
-		observedPlan, err := plan.Build(version, scalarTargets, context)
+		results, err := evaluateScalars(scalarTargets)
 		if err != nil {
-			return Result{}, newError(ErrorEffectivePlanBuild, "failed to build observed scalar evaluation plan", err)
+			return Result{}, err
 		}
-		evaluated, err := evaluator.EvaluatePlan(version, observedPlan)
-		if err != nil {
-			return Result{}, newError(ErrorEvaluation, "ordinary scalar evaluation failed while observing dependencies", err)
+		if len(results) != len(scalarTargets) {
+			return Result{}, newError(ErrorInvariantViolation, "observed scalar evaluator returned a wrong result count", nil)
 		}
-		for _, target := range scalarTargets {
-			result, ok := evaluated.Result(target)
-			if !ok || !result.IsValid() {
+		for _, result := range results {
+			if !result.IsValid() {
 				return Result{}, newError(ErrorInvariantViolation, "observed scalar evaluation omitted a requested root", nil)
 			}
 			collectProvenanceEdges(result.Provenance(), address.PropertyAddress{}, actual)

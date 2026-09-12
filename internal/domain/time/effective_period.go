@@ -65,3 +65,18 @@ func (p EffectivePeriod) IsValid() bool {
 
 	return true
 }
+
+// Equal reports semantic equality of two optional-ended effective periods.
+func (p EffectivePeriod) Equal(other EffectivePeriod) bool {
+	if !p.IsValid() || !other.IsValid() ||
+		p.hasFrom != other.hasFrom || p.hasTo != other.hasTo {
+		return false
+	}
+	if p.hasFrom && !p.from.Equal(other.from) {
+		return false
+	}
+	if p.hasTo && !p.to.Equal(other.to) {
+		return false
+	}
+	return true
+}
