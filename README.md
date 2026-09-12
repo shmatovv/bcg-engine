@@ -115,10 +115,11 @@ BCG provides no built-in catalog of currencies, weights, lengths, or other
 business units.
 
 `TemporalScalar` and `TemporalSeries` describe property temporal mode.
-`PointSeries` and `IntervalSeries` are the supported source-series axes. They
-are primitives only in this release; source-series and value-binding authoring
-arrive in later steps. `PrecisionPolicy` uses an explicit scale and one of
-`RoundTruncate`, `RoundFloor`, `RoundCeil`, `RoundHalfUp`, or `RoundHalfEven`.
+`PointSeries` and `IntervalSeries` are the supported source-series axes;
+immutable source Series and persistent ValueBindings are authored through the
+root package as described below. `PrecisionPolicy` uses an explicit scale and
+one of `RoundTruncate`, `RoundFloor`, `RoundCeil`, `RoundHalfUp`, or
+`RoundHalfEven`.
 
 ## Schema authoring
 

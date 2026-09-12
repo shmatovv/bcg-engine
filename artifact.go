@@ -1,8 +1,10 @@
 package bcg
 
 import (
+	"errors"
 	"fmt"
 	"io"
+	"reflect"
 	"sort"
 
 	"github.com/shmatovv/bcg-engine/internal/domain/scenario"
@@ -32,6 +34,12 @@ func NewArtifact(model Model, scenarios ...Scenario) (Artifact, error) {
 	}
 	artifact, err := formatbcg.NewArtifact(model.name, model.version, values)
 	if err != nil {
+		// ErrArtifactInvalid represents malformed construction arguments at
+		// the internal format boundary (for example duplicate Scenario IDs).
+		// Do not require public callers to know that internal sentinel.
+		if errors.Is(err, formatbcg.ErrArtifactInvalid) {
+			return Artifact{}, fmt.Errorf("%w: %v", ErrInvalidArgument, err)
+		}
 		return Artifact{}, publicError(err)
 	}
 	return Artifact{value: artifact}, nil
@@ -39,6 +47,12 @@ func NewArtifact(model Model, scenarios ...Scenario) (Artifact, error) {
 
 // Decode reads one .bcg artifact from r.
 func Decode(r io.Reader) (Artifact, error) {
+	if isNilInterface(r) {
+		// Preserve the pre-v1.1 malformed-artifact classification for a literal
+		// nil reader while also exposing the caller-input category added by the
+		// public authoring boundary.
+		return Artifact{}, fmt.Errorf("%w: %w: reader is nil", ErrInvalidArgument, ErrMalformedArtifact)
+	}
 	decoded, err := formatbcg.Decode(r)
 	if err != nil {
 		return Artifact{}, publicError(err)
@@ -60,7 +74,16 @@ func Encode(w io.Writer, artifact Artifact) error {
 	if !artifact.IsValid() {
 		return fmt.Errorf("%w: artifact is invalid", ErrInvalidArgument)
 	}
-	return publicError(formatbcg.Encode(w, artifact.value))
+	if isNilInterface(w) {
+		return fmt.Errorf("%w: writer is nil", ErrInvalidArgument)
+	}
+	if err := formatbcg.Encode(w, artifact.value); err != nil {
+		if errors.Is(err, formatbcg.ErrArtifactInvalid) {
+			return fmt.Errorf("%w: %v", ErrInvalidArgument, err)
+		}
+		return publicError(err)
+	}
+	return nil
 }
 
 // Marshal returns canonical deterministic .bcg JSON.
@@ -114,6 +137,22 @@ func (a Artifact) Scenarios() []Scenario {
 		result[index] = scenarioFromInternal(item)
 	}
 	return result
+}
+
+// isNilInterface recognizes both a nil interface and a typed nil stored in an
+// interface. io.Reader/io.Writer accept interface values, so this keeps a
+// normal public invalid-input error from becoming a nil-receiver panic.
+func isNilInterface(value any) bool {
+	if value == nil {
+		return true
+	}
+	reflected := reflect.ValueOf(value)
+	switch reflected.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return reflected.IsNil()
+	default:
+		return false
+	}
 }
 
 // Scenario is an immutable overlay tied to exactly one Model version.
