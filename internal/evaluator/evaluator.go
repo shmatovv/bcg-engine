@@ -5,7 +5,6 @@ import (
 	"github.com/shmatovv/bcg-engine/internal/domain/schema"
 	domaintime "github.com/shmatovv/bcg-engine/internal/domain/time"
 	"github.com/shmatovv/bcg-engine/internal/expression/ast"
-	"github.com/shmatovv/bcg-engine/internal/model"
 	"github.com/shmatovv/bcg-engine/internal/plan"
 	"github.com/shmatovv/bcg-engine/internal/provenance"
 	resolvervalue "github.com/shmatovv/bcg-engine/internal/resolver/value"
@@ -30,7 +29,7 @@ import (
 // This guarantees that override pruning used by evaluation is the same
 // semantics exposed through the explicit Plan API.
 func Evaluate(
-	version model.ModelVersion,
+	version Source,
 	target address.PropertyAddress,
 	context runtime.CalculationContext,
 ) (Result, error) {
@@ -43,14 +42,13 @@ func Evaluate(
 			)
 	}
 
-	effectivePlan, err :=
-		plan.Build(
-			version,
-			[]address.PropertyAddress{
-				target,
-			},
-			context,
-		)
+	var effectivePlan plan.Plan
+	var err error
+	if graph, ok := dependencyGraph(version); ok {
+		effectivePlan, err = plan.BuildWithDependencyGraph(version, graph, []address.PropertyAddress{target}, context)
+	} else {
+		effectivePlan, err = plan.Build(version, []address.PropertyAddress{target}, context)
+	}
 
 	if err != nil {
 		return Result{},
@@ -101,7 +99,7 @@ func Evaluate(
 // evaluated merely because it is statically reachable in the Base Dependency
 // Graph.
 func EvaluatePlan(
-	version model.ModelVersion,
+	version Source,
 	effectivePlan plan.Plan,
 ) (PlanResult, error) {
 	if !version.IsCommitted() {
@@ -122,13 +120,12 @@ func EvaluatePlan(
 			)
 	}
 
-	if effectivePlan.ModelVersionID() !=
-		version.ID() {
+	if !effectivePlan.SourceIdentity().Equal(version.SourceIdentity()) {
 
 		return PlanResult{},
 			newError(
 				ErrorInvalidEvaluationPlan,
-				"Effective Evaluation Plan belongs to a different ModelVersion",
+				"Effective Evaluation Plan belongs to a different immutable evaluation source",
 				nil,
 			)
 	}
@@ -218,7 +215,7 @@ func EvaluatePlan(
 }
 
 type evaluationState struct {
-	version model.ModelVersion
+	version Source
 	context runtime.CalculationContext
 
 	effectivePlan plan.Plan

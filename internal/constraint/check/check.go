@@ -8,7 +8,6 @@ import (
 	domaintime "github.com/shmatovv/bcg-engine/internal/domain/time"
 	"github.com/shmatovv/bcg-engine/internal/evaluator"
 	"github.com/shmatovv/bcg-engine/internal/expression/ast"
-	"github.com/shmatovv/bcg-engine/internal/model"
 	resolvervalue "github.com/shmatovv/bcg-engine/internal/resolver/value"
 	"github.com/shmatovv/bcg-engine/internal/runtime"
 	enginevalue "github.com/shmatovv/bcg-engine/internal/types/value"
@@ -18,7 +17,7 @@ import (
 // Constraints accept only At contexts: Period × Constraint would require an
 // explicit temporal reduction that Core v1 intentionally does not define.
 func One(
-	version model.ModelVersion,
+	version Source,
 	constraintID identity.UUID,
 	context runtime.CalculationContext,
 ) (Result, error) {
@@ -55,7 +54,10 @@ func OneWithSession(
 		return Result{}, newError(ErrorInvalidModelVersion, "evaluation Session is nil", nil)
 	}
 
-	version := session.ModelVersion()
+	version, ok := session.Source().(Source)
+	if !ok {
+		return Result{}, newError(ErrorInvalidModelVersion, "evaluation Session source cannot evaluate Constraints", nil)
+	}
 	if err := validateRequest(version, context); err != nil {
 		return Result{}, err
 	}
@@ -77,7 +79,7 @@ func OneWithSession(
 // Constraints are evaluated even after a Hard violation so a Feasibility
 // report can retain the complete set of outcomes.
 func All(
-	version model.ModelVersion,
+	version Source,
 	context runtime.CalculationContext,
 ) (Report, error) {
 	if err := validateRequest(version, context); err != nil {
@@ -128,7 +130,10 @@ func AllWithSession(
 		return Report{}, newError(ErrorInvalidModelVersion, "evaluation Session is nil", nil)
 	}
 
-	version := session.ModelVersion()
+	version, ok := session.Source().(Source)
+	if !ok {
+		return Report{}, newError(ErrorInvalidModelVersion, "evaluation Session source cannot evaluate Constraints", nil)
+	}
 	if err := validateRequest(version, context); err != nil {
 		return Report{}, err
 	}
@@ -156,7 +161,7 @@ func AllWithSession(
 }
 
 func validateRequest(
-	version model.ModelVersion,
+	version Source,
 	context runtime.CalculationContext,
 ) error {
 	if !version.IsCommitted() {
@@ -195,7 +200,7 @@ func validateRequest(
 }
 
 func evaluateConstraint(
-	version model.ModelVersion,
+	version Source,
 	modelConstraint constraint.Constraint,
 	context runtime.CalculationContext,
 ) (Result, error) {
@@ -210,7 +215,7 @@ func evaluateConstraint(
 }
 
 func evaluateConstraintWithExpressionEvaluator(
-	version model.ModelVersion,
+	version Source,
 	modelConstraint constraint.Constraint,
 	context runtime.CalculationContext,
 	evaluate func(ast.Expression, runtime.CalculationContext) (evaluator.Result, error),

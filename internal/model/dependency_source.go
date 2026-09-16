@@ -51,6 +51,26 @@ func (s draftDependencySource) Relations() []semantic.Relation {
 	)
 }
 
+func (s draftDependencySource) OutgoingRelations(entityID, relationTypeID identity.UUID) []semantic.Relation {
+	result := make([]semantic.Relation, 0)
+	for _, relation := range s.draft.relations {
+		if relation.TypeID() == relationTypeID && relation.From() == entityID {
+			result = append(result, relation)
+		}
+	}
+	return result
+}
+
+func (s draftDependencySource) IncomingRelations(entityID, relationTypeID identity.UUID) []semantic.Relation {
+	result := make([]semantic.Relation, 0)
+	for _, relation := range s.draft.relations {
+		if relation.TypeID() == relationTypeID && relation.To() == entityID {
+			result = append(result, relation)
+		}
+	}
+	return result
+}
+
 func (s draftDependencySource) EntityType(
 	id identity.UUID,
 ) (schema.EntityType, bool) {

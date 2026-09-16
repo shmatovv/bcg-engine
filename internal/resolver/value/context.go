@@ -1,7 +1,6 @@
 package value
 
 import (
-	"github.com/shmatovv/bcg-engine/internal/model"
 	"github.com/shmatovv/bcg-engine/internal/runtime"
 	scenariovalidation "github.com/shmatovv/bcg-engine/internal/scenario"
 )
@@ -18,7 +17,7 @@ import (
 //   - every ScenarioOverride target/value/scope/effective period;
 //   - every calculation override target, temporal mode, type, unit and nullability.
 func ValidateContext(
-	version model.ModelVersion,
+	version ModelSource,
 	context runtime.CalculationContext,
 ) error {
 	if !version.IsCommitted() {

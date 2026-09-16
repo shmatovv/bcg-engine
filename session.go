@@ -9,23 +9,31 @@ import (
 	"github.com/shmatovv/bcg-engine/internal/domain/address"
 	"github.com/shmatovv/bcg-engine/internal/evaluator"
 	"github.com/shmatovv/bcg-engine/internal/impact"
+	resolvervalue "github.com/shmatovv/bcg-engine/internal/resolver/value"
 	ruleeval "github.com/shmatovv/bcg-engine/internal/rule/eval"
 	"github.com/shmatovv/bcg-engine/internal/runtime"
 )
 
 // Session owns reusable incremental scalar evaluation state for one immutable
-// Model. All its methods are safe for concurrent use. A transition obtains a
-// new immutable CalculationContext; in-flight evaluations retain their prior
-// context just as in the underlying evaluator Session.
+// model-only or Dataset-backed evaluation source. All its methods are safe for
+// concurrent use. A transition obtains a new immutable CalculationContext;
+// in-flight evaluations retain their prior context just as in the underlying
+// evaluator Session.
 type Session struct {
-	model   Model
-	value   *evaluator.Session
-	mu      sync.RWMutex
-	context runtime.CalculationContext
+	model      Model
+	dataset    Dataset
+	hasDataset bool
+	value      *evaluator.Session
+	mu         sync.RWMutex
+	context    runtime.CalculationContext
 }
 
 func newSession(model Model, value *evaluator.Session, context runtime.CalculationContext) *Session {
 	return &Session{model: model, value: value, context: context}
+}
+
+func newDatasetSession(model Model, dataset Dataset, value *evaluator.Session, context runtime.CalculationContext) *Session {
+	return &Session{model: model, dataset: dataset, hasDataset: true, value: value, context: context}
 }
 
 func (s *Session) valid() error {
@@ -51,6 +59,14 @@ func (s *Session) Model() Model {
 	return s.model
 }
 
+// Dataset returns the optional fixed Dataset used by this Session.
+func (s *Session) Dataset() (Dataset, bool) {
+	if s == nil || !s.hasDataset {
+		return Dataset{}, false
+	}
+	return s.dataset, true
+}
+
 // Context returns the current immutable calculation environment.
 func (s *Session) Context() CalculationContext {
 	context, err := s.snapshot()
@@ -71,8 +87,8 @@ func (s *Session) SetCalculationContext(context CalculationContext) error {
 	if err != nil {
 		return err
 	}
-	if err := s.model.validateContext(converted); err != nil {
-		return err
+	if err := resolvervalue.ValidateContext(s.value.Source(), converted); err != nil {
+		return publicError(err)
 	}
 	s.mu.Lock()
 	s.context = converted
@@ -133,14 +149,22 @@ func (s *Session) EvaluateMany(targets []PropertyAddress) ([]Result, error) {
 	return resultsFromInternal(results), nil
 }
 
-// EvaluateSeries delegates to the Model's established Series evaluator. Series
-// intentionally remains outside the persistent scalar session cache.
+// EvaluateSeries uses the Session's fixed effective source. Series remains
+// outside the persistent scalar cache but never falls back to model-only data.
 func (s *Session) EvaluateSeries(target PropertyAddress) (SeriesResult, error) {
 	context, err := s.snapshot()
 	if err != nil {
 		return SeriesResult{}, err
 	}
-	return s.model.EvaluateSeries(target, CalculationContext{value: context})
+	addressValue, err := target.internal()
+	if err != nil {
+		return SeriesResult{}, err
+	}
+	result, err := evaluator.EvaluateSeries(s.value.Source(), addressValue, context)
+	if err != nil {
+		return SeriesResult{}, publicError(err)
+	}
+	return seriesResultFromInternal(result), nil
 }
 
 // Explain returns cached actual scalar provenance without re-running a warm property calculation.
@@ -160,8 +184,8 @@ func (s *Session) Explain(target PropertyAddress) (Explanation, error) {
 	return explanationFromInternal(explained), nil
 }
 
-// AnalyzeImpact exposes structural/effective/observed impact. Observed uses
-// this session's shared evaluator; structural/effective remain immutable-model analyses.
+// AnalyzeImpact exposes structural/effective/observed impact over this
+// Session's fixed effective source. Observed uses the shared evaluator.
 func (s *Session) AnalyzeImpact(mode ImpactMode, source PropertyAddress) (ImpactResult, error) {
 	context, err := s.snapshot()
 	if err != nil {
@@ -174,9 +198,9 @@ func (s *Session) AnalyzeImpact(mode ImpactMode, source PropertyAddress) (Impact
 	var result impact.Result
 	switch mode {
 	case StructuralImpact:
-		result, err = impact.AnalyzeStructural(s.model.version, addressValue)
+		result, err = impact.AnalyzeStructuralSource(s.value.Source(), addressValue)
 	case EffectiveImpact:
-		result, err = impact.AnalyzeEffective(s.model.version, addressValue, context)
+		result, err = impact.AnalyzeEffectiveSource(s.value.Source(), addressValue, context)
 	case ObservedImpact:
 		result, err = impact.AnalyzeObservedWithSession(s.value, addressValue, context)
 	default:

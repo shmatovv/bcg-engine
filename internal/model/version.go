@@ -223,6 +223,18 @@ func (v ModelVersion) ID() identity.UUID {
 	return v.id
 }
 
+// ModelVersion makes a model-only source expose its underlying version through
+// the same narrow runtime capability as a combined EvaluationSource.
+func (v ModelVersion) ModelVersion() ModelVersion { return v }
+
+// SourceIdentity identifies model-only evaluation against this version.
+func (v ModelVersion) SourceIdentity() EffectiveSourceIdentity {
+	if !v.IsCommitted() {
+		return EffectiveSourceIdentity{}
+	}
+	return NewModelSourceIdentity(v.id)
+}
+
 func (v ModelVersion) ModelID() identity.UUID {
 	return v.modelID
 }

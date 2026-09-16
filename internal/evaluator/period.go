@@ -61,7 +61,7 @@ func (s PeriodSegment) IsValid() bool {
 // PeriodResult contains all contiguous scalar results over one requested
 // finite calculation period. It intentionally performs no time aggregation.
 type PeriodResult struct {
-	modelVersionID identity.UUID
+	sourceIdentity model.EffectiveSourceIdentity
 	target         address.PropertyAddress
 	from           datetime.DateTime
 	to             datetime.DateTime
@@ -69,13 +69,13 @@ type PeriodResult struct {
 }
 
 func newPeriodResult(
-	versionID identity.UUID,
+	sourceIdentity model.EffectiveSourceIdentity,
 	target address.PropertyAddress,
 	from datetime.DateTime,
 	to datetime.DateTime,
 	segments []PeriodSegment,
 ) PeriodResult {
-	if versionID.IsZero() || !target.IsValid() || !from.IsValid() ||
+	if !sourceIdentity.IsValid() || !target.IsValid() || !from.IsValid() ||
 		!to.IsValid() || from.Cmp(to) >= 0 || len(segments) == 0 {
 		panic("evaluator: invalid PeriodResult")
 	}
@@ -91,7 +91,7 @@ func newPeriodResult(
 	}
 
 	return PeriodResult{
-		modelVersionID: versionID,
+		sourceIdentity: sourceIdentity,
 		target:         target,
 		from:           from,
 		to:             to,
@@ -100,7 +100,11 @@ func newPeriodResult(
 }
 
 // ModelVersionID identifies the immutable model snapshot evaluated.
-func (r PeriodResult) ModelVersionID() identity.UUID { return r.modelVersionID }
+func (r PeriodResult) ModelVersionID() identity.UUID { return r.sourceIdentity.ModelVersionID() }
+
+// SourceIdentity identifies the exact immutable model-only or Dataset-backed
+// source evaluated over the requested period.
+func (r PeriodResult) SourceIdentity() model.EffectiveSourceIdentity { return r.sourceIdentity }
 
 // Target identifies the concrete scalar property evaluated.
 func (r PeriodResult) Target() address.PropertyAddress { return r.target }
@@ -117,7 +121,7 @@ func (r PeriodResult) Segments() []PeriodSegment {
 }
 
 func (r PeriodResult) IsValid() bool {
-	if r.modelVersionID.IsZero() || !r.target.IsValid() || !r.from.IsValid() ||
+	if !r.sourceIdentity.IsValid() || !r.target.IsValid() || !r.from.IsValid() ||
 		!r.to.IsValid() || r.from.Cmp(r.to) >= 0 || len(r.segments) == 0 {
 		return false
 	}
@@ -139,7 +143,7 @@ func (r PeriodResult) IsValid() bool {
 // with an At context, retaining the ordinary plan, lazy evaluator, and
 // provenance semantics for each segment.
 func EvaluatePeriod(
-	version model.ModelVersion,
+	version Source,
 	target address.PropertyAddress,
 	context runtime.CalculationContext,
 ) (PeriodResult, error) {
@@ -169,7 +173,11 @@ func EvaluatePeriod(
 			"Period calculation context validation failed", err)
 	}
 
-	graph, err := dependency.Build(version)
+	graph, cached := dependencyGraph(version)
+	var err error
+	if !cached {
+		graph, err = dependency.Build(version)
+	}
 	if err != nil {
 		return PeriodResult{}, newError(ErrorPlanBuild,
 			"failed to build Base Dependency Graph for Period evaluation", err)
@@ -206,11 +214,11 @@ func EvaluatePeriod(
 		segments = append(segments, newPeriodSegment(segmentFrom, segmentTo, result))
 	}
 
-	return newPeriodResult(version.ID(), target, from, to, segments), nil
+	return newPeriodResult(version.SourceIdentity(), target, from, to, segments), nil
 }
 
 func periodBoundaries(
-	version model.ModelVersion,
+	version Source,
 	graph dependency.Graph,
 	target address.PropertyAddress,
 	context runtime.CalculationContext,

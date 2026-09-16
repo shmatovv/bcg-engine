@@ -30,6 +30,9 @@ func NewArtifact(model Model, scenarios ...Scenario) (Artifact, error) {
 	}
 	values := make([]scenario.Scenario, len(scenarios))
 	for index, candidate := range scenarios {
+		if _, bound := candidate.value.BaseDatasetID(); bound {
+			return Artifact{}, fmt.Errorf("%w: Dataset-bound Scenario is runtime-only and cannot be serialized in a .bcg artifact", ErrInvalidArgument)
+		}
 		values[index] = candidate.value
 	}
 	artifact, err := formatbcg.NewArtifact(model.name, model.version, values)
@@ -155,7 +158,9 @@ func isNilInterface(value any) bool {
 	}
 }
 
-// Scenario is an immutable overlay tied to exactly one Model version.
+// Scenario is an immutable overlay tied to exactly one Model version and,
+// when it targets runtime data, one exact Dataset. Model-only Scenarios remain
+// portable; Dataset-bound Scenarios are runtime-only and cannot enter .bcg.
 type Scenario struct{ value scenario.Scenario }
 
 func scenarioFromInternal(value scenario.Scenario) Scenario { return Scenario{value: value} }
@@ -171,3 +176,10 @@ func (s Scenario) Name() string { return s.value.Name() }
 
 // BaseVersionID returns the Model version that s overlays.
 func (s Scenario) BaseVersionID() ID { return idFromInternal(s.value.BaseModelVersionID()) }
+
+// BaseDatasetID returns the Dataset to which a runtime-only Scenario is
+// bound. Portable model-only Scenarios return false.
+func (s Scenario) BaseDatasetID() (ID, bool) {
+	id, ok := s.value.BaseDatasetID()
+	return idFromInternal(id), ok
+}

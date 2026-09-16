@@ -8,14 +8,13 @@ import (
 	domaintime "github.com/shmatovv/bcg-engine/internal/domain/time"
 	"github.com/shmatovv/bcg-engine/internal/evaluator"
 	"github.com/shmatovv/bcg-engine/internal/expression/ast"
-	"github.com/shmatovv/bcg-engine/internal/model"
 	resolvervalue "github.com/shmatovv/bcg-engine/internal/resolver/value"
 	"github.com/shmatovv/bcg-engine/internal/runtime"
 )
 
 // One evaluates one committed Rule.
 func One(
-	version model.ModelVersion,
+	version Source,
 	ruleID identity.UUID,
 	context runtime.CalculationContext,
 ) (Result, error) {
@@ -51,7 +50,10 @@ func OneWithSession(
 		return Result{}, newError(ErrorInvalidModelVersion, "evaluation Session is nil", nil)
 	}
 
-	version := session.ModelVersion()
+	version, ok := session.Source().(Source)
+	if !ok {
+		return Result{}, newError(ErrorInvalidModelVersion, "evaluation Session source cannot evaluate Rules", nil)
+	}
 	if err := validateRequest(version, context); err != nil {
 		return Result{}, err
 	}
@@ -66,7 +68,7 @@ func OneWithSession(
 
 // All evaluates every committed Rule in deterministic UUID order.
 func All(
-	version model.ModelVersion,
+	version Source,
 	context runtime.CalculationContext,
 ) (Report, error) {
 	if err := validateRequest(version, context); err != nil {
@@ -120,7 +122,10 @@ func AllWithSession(
 		return Report{}, newError(ErrorInvalidModelVersion, "evaluation Session is nil", nil)
 	}
 
-	version := session.ModelVersion()
+	version, ok := session.Source().(Source)
+	if !ok {
+		return Report{}, newError(ErrorInvalidModelVersion, "evaluation Session source cannot evaluate Rules", nil)
+	}
 	if err := validateRequest(version, context); err != nil {
 		return Report{}, err
 	}
@@ -146,7 +151,7 @@ func AllWithSession(
 // decision contract. A Period would require an explicit temporal reduction,
 // which Rule Core v1 does not define.
 func validateRequest(
-	version model.ModelVersion,
+	version Source,
 	context runtime.CalculationContext,
 ) error {
 	if !version.IsCommitted() {
@@ -165,7 +170,7 @@ func validateRequest(
 }
 
 func evaluateRule(
-	version model.ModelVersion,
+	version Source,
 	modelRule domainrule.Rule,
 	context runtime.CalculationContext,
 ) (Result, error) {
@@ -180,7 +185,7 @@ func evaluateRule(
 }
 
 func evaluateRuleWithExpressionEvaluator(
-	version model.ModelVersion,
+	version Source,
 	modelRule domainrule.Rule,
 	context runtime.CalculationContext,
 	evaluate func(ast.Expression, runtime.CalculationContext) (evaluator.Result, error),

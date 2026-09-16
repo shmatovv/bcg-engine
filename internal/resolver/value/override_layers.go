@@ -3,7 +3,6 @@ package value
 import (
 	"github.com/shmatovv/bcg-engine/internal/domain/address"
 	"github.com/shmatovv/bcg-engine/internal/domain/schema"
-	"github.com/shmatovv/bcg-engine/internal/model"
 	"github.com/shmatovv/bcg-engine/internal/runtime"
 )
 
@@ -20,14 +19,14 @@ import (
 // This is an internal execution helper. It does not cache business results and
 // does not change resolver precedence or outcome semantics.
 type OverrideLayers struct {
-	version model.ModelVersion
+	version ModelSource
 	context runtime.CalculationContext
 }
 
 // NewOverrideLayers validates one immutable ModelVersion and calculation
 // environment before it is reused while constructing an Effective Plan.
 func NewOverrideLayers(
-	version model.ModelVersion,
+	version ModelSource,
 	context runtime.CalculationContext,
 ) (OverrideLayers, error) {
 	if err := ValidateContext(version, context); err != nil {

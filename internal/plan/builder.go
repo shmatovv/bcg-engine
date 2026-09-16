@@ -7,7 +7,6 @@ import (
 	"github.com/shmatovv/bcg-engine/internal/domain/schema"
 	domaintime "github.com/shmatovv/bcg-engine/internal/domain/time"
 	"github.com/shmatovv/bcg-engine/internal/graph/dependency"
-	"github.com/shmatovv/bcg-engine/internal/model"
 	resolvervalue "github.com/shmatovv/bcg-engine/internal/resolver/value"
 	"github.com/shmatovv/bcg-engine/internal/runtime"
 )
@@ -23,7 +22,7 @@ import (
 //
 // The resulting Plan is permanently bound to this exact CalculationContext.
 func Build(
-	version model.ModelVersion,
+	version Source,
 	roots []address.PropertyAddress,
 	context runtime.CalculationContext,
 ) (Plan, error) {
@@ -64,10 +63,11 @@ func Build(
 // AST on each context transition.
 //
 // The caller must provide the concrete dependency.Graph for the same committed
-// version. This package validates all roots and context/model interactions; a
-// mismatched graph is an internal invariant violation at its call site.
+// exact immutable source. This package validates all roots and
+// context/source interactions; a mismatched graph is an internal invariant
+// violation at its call site.
 func BuildWithDependencyGraph(
-	version model.ModelVersion,
+	version Source,
 	baseGraph dependency.Graph,
 	roots []address.PropertyAddress,
 	context runtime.CalculationContext,
@@ -181,7 +181,7 @@ func BuildWithDependencyGraph(
 
 	result :=
 		newPlan(
-			version.ID(),
+			version.SourceIdentity(),
 			context,
 			canonicalRoots,
 			builder.nodes,
@@ -216,7 +216,7 @@ type edgeKey struct {
 }
 
 type builder struct {
-	version model.ModelVersion
+	version Source
 	context runtime.CalculationContext
 
 	base dependency.Graph

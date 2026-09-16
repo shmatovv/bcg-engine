@@ -3,6 +3,7 @@ package evaluator
 import (
 	"github.com/shmatovv/bcg-engine/internal/domain/address"
 	"github.com/shmatovv/bcg-engine/internal/domain/identity"
+	"github.com/shmatovv/bcg-engine/internal/model"
 	"github.com/shmatovv/bcg-engine/internal/plan"
 )
 
@@ -58,7 +59,7 @@ func (e Entry) IsValid() bool {
 // Every root, however, is always evaluated successfully when PlanResult is
 // returned.
 type PlanResult struct {
-	modelVersionID identity.UUID
+	sourceIdentity model.EffectiveSourceIdentity
 
 	roots []address.PropertyAddress
 
@@ -134,7 +135,7 @@ func newPlanResult(
 	}
 
 	return PlanResult{
-		modelVersionID: effectivePlan.ModelVersionID(),
+		sourceIdentity: effectivePlan.SourceIdentity(),
 		roots:          roots,
 		entries:        entries,
 		byTarget:       byTarget,
@@ -142,8 +143,12 @@ func newPlanResult(
 }
 
 func (r PlanResult) ModelVersionID() identity.UUID {
-	return r.modelVersionID
+	return r.sourceIdentity.ModelVersionID()
 }
+
+// SourceIdentity identifies the exact immutable model-only or Dataset-backed
+// source whose plan produced r.
+func (r PlanResult) SourceIdentity() model.EffectiveSourceIdentity { return r.sourceIdentity }
 
 func (r PlanResult) Len() int {
 	return len(r.entries)
@@ -208,7 +213,7 @@ func (r PlanResult) RootResults() []Entry {
 }
 
 func (r PlanResult) IsValid() bool {
-	if r.modelVersionID.IsZero() ||
+	if !r.sourceIdentity.IsValid() ||
 		len(r.roots) == 0 ||
 		len(r.entries) == 0 ||
 		len(r.byTarget) == 0 {

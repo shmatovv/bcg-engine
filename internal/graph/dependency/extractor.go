@@ -581,97 +581,40 @@ func (e expressionExtractor) traversalItems(
 	selfEntityID identity.UUID,
 	source ast.TraversalSource,
 ) ([]concreteBinding, error) {
-	relations := e.source.Relations()
-
-	sort.Slice(
-		relations,
-		func(i, j int) bool {
-			return compareUUID(
-				relations[i].ID(),
-				relations[j].ID(),
-			) < 0
-		},
-	)
-
 	result := make(
 		[]concreteBinding,
 		0,
 	)
 
-	for _, relation := range relations {
-
-		if !relation.IsValid() ||
-			relation.TypeID() !=
-				source.RelationTypeID() {
-
-			continue
-		}
-
-		switch source.Direction() {
-		case ast.TraversalDirectionOutgoing:
-			if relation.From() !=
-				selfEntityID {
-
+	appendRelations := func(relations []semantic.Relation, reverse, skipSelfLoop bool) {
+		for _, relation := range relations {
+			if !relation.IsValid() {
 				continue
 			}
-
-			result = append(
-				result,
-				newConcreteBinding(
-					relation,
-					relation.To(),
-				),
-			)
-
-		case ast.TraversalDirectionIncoming:
-			if relation.To() !=
-				selfEntityID {
-
+			if skipSelfLoop && relation.From() == selfEntityID {
 				continue
+			} // one self-loop in Both
+			other := relation.To()
+			if reverse {
+				other = relation.From()
 			}
-
-			result = append(
-				result,
-				newConcreteBinding(
-					relation,
-					relation.From(),
-				),
-			)
-
-		case ast.TraversalDirectionBoth:
-			if relation.From() ==
-				selfEntityID {
-
-				result = append(
-					result,
-					newConcreteBinding(
-						relation,
-						relation.To(),
-					),
-				)
-			}
-
-			if relation.To() ==
-				selfEntityID &&
-				relation.From() !=
-					selfEntityID {
-
-				result = append(
-					result,
-					newConcreteBinding(
-						relation,
-						relation.From(),
-					),
-				)
-			}
-
-		default:
-			return nil, newBuildError(
-				BuildErrorInvalidTraversal,
-				"aggregate traversal direction is invalid",
-			)
+			result = append(result, newConcreteBinding(relation, other))
 		}
 	}
+
+	switch source.Direction() {
+	case ast.TraversalDirectionOutgoing:
+		appendRelations(e.source.OutgoingRelations(selfEntityID, source.RelationTypeID()), false, false)
+	case ast.TraversalDirectionIncoming:
+		appendRelations(e.source.IncomingRelations(selfEntityID, source.RelationTypeID()), true, false)
+	case ast.TraversalDirectionBoth:
+		appendRelations(e.source.OutgoingRelations(selfEntityID, source.RelationTypeID()), false, false)
+		appendRelations(e.source.IncomingRelations(selfEntityID, source.RelationTypeID()), true, true)
+	default:
+		return nil, newBuildError(BuildErrorInvalidTraversal, "aggregate traversal direction is invalid")
+	}
+
+	sort.Slice(result, func(i, j int) bool { return compareUUID(result[i].relation.ID(), result[j].relation.ID()) < 0 })
 
 	return result, nil
 }

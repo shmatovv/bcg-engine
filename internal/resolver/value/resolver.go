@@ -8,7 +8,6 @@ import (
 	"github.com/shmatovv/bcg-engine/internal/domain/schema"
 	"github.com/shmatovv/bcg-engine/internal/domain/semantic"
 	domaintime "github.com/shmatovv/bcg-engine/internal/domain/time"
-	"github.com/shmatovv/bcg-engine/internal/model"
 	"github.com/shmatovv/bcg-engine/internal/runtime"
 	"github.com/shmatovv/bcg-engine/internal/types/datetime"
 	"github.com/shmatovv/bcg-engine/internal/types/series"
@@ -35,7 +34,7 @@ import (
 //
 // Equal-specificity candidates are never resolved by insertion or map order.
 func Resolve(
-	version model.ModelVersion,
+	version ModelSource,
 	target address.PropertyAddress,
 	context runtime.CalculationContext,
 ) (Resolution, error) {
@@ -71,7 +70,7 @@ func Resolve(
 // It is an internal execution API. Callers handling arbitrary runtime input
 // must use Resolve instead.
 func ResolveValidated(
-	version model.ModelVersion,
+	version ModelSource,
 	target address.PropertyAddress,
 	context runtime.CalculationContext,
 ) (Resolution, error) {
@@ -304,7 +303,7 @@ func ResolveValidated(
 }
 
 func validateScopeContext(
-	version model.ModelVersion,
+	version ModelSource,
 	context runtime.CalculationContext,
 ) error {
 	for _, selector := range context.
@@ -341,7 +340,7 @@ func validateScopeContext(
 }
 
 func resolveObjectOwner(
-	version model.ModelVersion,
+	version ModelSource,
 	object address.ObjectRef,
 ) (schema.PropertyOwner, error) {
 	switch object.Kind() {
@@ -425,7 +424,7 @@ func resolveObjectOwner(
 }
 
 func validateOverride(
-	version model.ModelVersion,
+	version ModelSource,
 	definition schema.PropertyDefinition,
 	override runtime.Override,
 ) error {
@@ -569,7 +568,7 @@ func calculationOverrideHasUnit(definition schema.PropertyDefinition) bool {
 	return hasUnit
 }
 
-func calculationOverrideAllowsNull(version model.ModelVersion, definition schema.PropertyDefinition) bool {
+func calculationOverrideAllowsNull(version ModelSource, definition schema.PropertyDefinition) bool {
 	contractID, hasContract := definition.ContractID()
 	if !hasContract {
 		return false
@@ -579,7 +578,7 @@ func calculationOverrideAllowsNull(version model.ModelVersion, definition schema
 }
 
 func collectBaseCandidates(
-	version model.ModelVersion,
+	version ModelSource,
 	target address.PropertyAddress,
 	owner schema.PropertyOwner,
 ) ([]candidate, []candidate) {

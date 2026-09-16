@@ -21,6 +21,11 @@
 // Scenario is an immutable value-only overlay constructed against one
 // committed Model version.
 //
+// Dataset is an optional fully materialized immutable external data snapshot
+// bound to one exact Model version. Model.WithDataset returns an
+// EvaluationSnapshot that uses the combined graph without changing the
+// model-only API or portable .bcg artifacts.
+//
 // ValueType describes scalar schema metadata, while Value holds an actual
 // defined value. Dimension and Unit provide exact, domain-neutral unit
 // primitives; BCG has no built-in business-unit catalog. Unit conversion

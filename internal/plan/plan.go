@@ -5,6 +5,7 @@ import (
 
 	"github.com/shmatovv/bcg-engine/internal/domain/address"
 	"github.com/shmatovv/bcg-engine/internal/domain/identity"
+	"github.com/shmatovv/bcg-engine/internal/model"
 	resolvervalue "github.com/shmatovv/bcg-engine/internal/resolver/value"
 	"github.com/shmatovv/bcg-engine/internal/runtime"
 )
@@ -240,7 +241,7 @@ func (e Edge) IsValid() bool {
 // short-circuit semantics may legitimately leave statically reachable nodes
 // unevaluated.
 type Plan struct {
-	modelVersionID identity.UUID
+	sourceIdentity model.EffectiveSourceIdentity
 
 	context runtime.CalculationContext
 
@@ -256,15 +257,15 @@ type Plan struct {
 }
 
 func newPlan(
-	modelVersionID identity.UUID,
+	sourceIdentity model.EffectiveSourceIdentity,
 	context runtime.CalculationContext,
 	roots []address.PropertyAddress,
 	nodes map[address.PropertyAddress]Node,
 	edges []Edge,
 	order []address.PropertyAddress,
 ) Plan {
-	if modelVersionID.IsZero() {
-		panic("plan: ModelVersion id must not be zero")
+	if !sourceIdentity.IsValid() {
+		panic("plan: effective source identity is invalid")
 	}
 
 	if !context.IsValid() {
@@ -311,7 +312,7 @@ func newPlan(
 	// large immutable environments. Public Plan accessors remain defensive.
 
 	return Plan{
-		modelVersionID: modelVersionID,
+		sourceIdentity: sourceIdentity,
 		context:        context,
 		roots:          roots,
 		nodes:          nodes,
@@ -322,8 +323,12 @@ func newPlan(
 }
 
 func (p Plan) ModelVersionID() identity.UUID {
-	return p.modelVersionID
+	return p.sourceIdentity.ModelVersionID()
 }
+
+// SourceIdentity identifies the exact immutable model-only or Dataset-backed
+// source for which the plan was built.
+func (p Plan) SourceIdentity() model.EffectiveSourceIdentity { return p.sourceIdentity }
 
 // Context returns the exact immutable CalculationContext for which this plan
 // was built.
@@ -403,7 +408,7 @@ func (p Plan) DependenciesOf(
 }
 
 func (p Plan) IsValid() bool {
-	if p.modelVersionID.IsZero() ||
+	if !p.sourceIdentity.IsValid() ||
 		!p.context.IsValid() ||
 		len(p.roots) == 0 ||
 		len(p.nodes) == 0 {

@@ -2,7 +2,6 @@ package evaluator
 
 import (
 	"github.com/shmatovv/bcg-engine/internal/domain/address"
-	"github.com/shmatovv/bcg-engine/internal/model"
 	"github.com/shmatovv/bcg-engine/internal/provenance"
 	"github.com/shmatovv/bcg-engine/internal/runtime"
 	"github.com/shmatovv/bcg-engine/internal/types/datetime"
@@ -27,7 +26,7 @@ type Explanation struct {
 // pipeline and returns its actual structured provenance. Engine failures stay
 // errors; Null and Undefined are retained in Result and Root.
 func Explain(
-	version model.ModelVersion,
+	version Source,
 	target address.PropertyAddress,
 	context runtime.CalculationContext,
 ) (Explanation, error) {
@@ -78,7 +77,7 @@ type SeriesExplanation struct {
 // the normal Series evaluator. Period x Series remains unsupported by that
 // evaluator and therefore returns its existing engine error.
 func ExplainSeries(
-	version model.ModelVersion,
+	version Source,
 	target address.PropertyAddress,
 	context runtime.CalculationContext,
 ) (SeriesExplanation, error) {

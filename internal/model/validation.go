@@ -80,6 +80,14 @@ const (
 
 	ValidationIssueDependencyGraphBuildFailure
 	ValidationIssueCycle
+
+	// Dataset-specific lifecycle and ownership restrictions intentionally reuse
+	// ordinary semantic validation issue kinds wherever possible. The cases
+	// below have no equivalent in an authored self-contained model.
+	ValidationIssueInvalidDataset
+	ValidationIssueDatasetTypeBindingNotAllowed
+	ValidationIssueDatasetBindingTargetNotOwned
+	ValidationIssueDatasetRelationRequiresDatasetEndpoint
 )
 
 func (k ValidationIssueKind) IsValid() bool {
@@ -151,7 +159,11 @@ func (k ValidationIssueKind) IsValid() bool {
 		ValidationIssueInvalidRuleCondition,
 
 		ValidationIssueDependencyGraphBuildFailure,
-		ValidationIssueCycle:
+		ValidationIssueCycle,
+		ValidationIssueInvalidDataset,
+		ValidationIssueDatasetTypeBindingNotAllowed,
+		ValidationIssueDatasetBindingTargetNotOwned,
+		ValidationIssueDatasetRelationRequiresDatasetEndpoint:
 		return true
 
 	default:
@@ -273,6 +285,14 @@ func (k ValidationIssueKind) String() string {
 		return "DependencyGraphBuildFailure"
 	case ValidationIssueCycle:
 		return "Cycle"
+	case ValidationIssueInvalidDataset:
+		return "InvalidDataset"
+	case ValidationIssueDatasetTypeBindingNotAllowed:
+		return "DatasetTypeBindingNotAllowed"
+	case ValidationIssueDatasetBindingTargetNotOwned:
+		return "DatasetBindingTargetNotOwned"
+	case ValidationIssueDatasetRelationRequiresDatasetEndpoint:
+		return "DatasetRelationRequiresDatasetEndpoint"
 	default:
 		return "Invalid"
 	}

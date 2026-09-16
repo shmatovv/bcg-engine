@@ -5,6 +5,7 @@ import (
 
 	"github.com/shmatovv/bcg-engine/internal/domain/address"
 	"github.com/shmatovv/bcg-engine/internal/domain/identity"
+	"github.com/shmatovv/bcg-engine/internal/model"
 )
 
 // Mode states the exact dependency semantics used to produce a Result.
@@ -94,18 +95,18 @@ func (e Edge) IsValid() bool { return e.from.IsValid() && e.to.IsValid() }
 // recorded sample provenance tree. Sample trees are never paired or matched
 // by index, so the result does not claim a false temporal-coordinate match.
 type Result struct {
-	modelVersionID identity.UUID
+	sourceIdentity model.EffectiveSourceIdentity
 	source         address.PropertyAddress
 	mode           Mode
 	affected       []Affected
 	edges          []Edge
 }
 
-func newResult(modelVersionID identity.UUID, source address.PropertyAddress, mode Mode, depths map[address.PropertyAddress]int, edges map[edgeKey]struct{}) Result {
-	if modelVersionID.IsZero() || !source.IsValid() || !mode.IsValid() {
+func newResult(sourceIdentity model.EffectiveSourceIdentity, source address.PropertyAddress, mode Mode, depths map[address.PropertyAddress]int, edges map[edgeKey]struct{}) Result {
+	if !sourceIdentity.IsValid() || !source.IsValid() || !mode.IsValid() {
 		panic("impact: invalid result metadata")
 	}
-	result := Result{modelVersionID: modelVersionID, source: source, mode: mode}
+	result := Result{sourceIdentity: sourceIdentity, source: source, mode: mode}
 	for target, depth := range depths {
 		if target == source {
 			continue
@@ -138,7 +139,11 @@ func newResult(modelVersionID identity.UUID, source address.PropertyAddress, mod
 }
 
 // ModelVersionID identifies the immutable model snapshot analyzed.
-func (r Result) ModelVersionID() identity.UUID { return r.modelVersionID }
+func (r Result) ModelVersionID() identity.UUID { return r.sourceIdentity.ModelVersionID() }
+
+// SourceIdentity identifies the exact immutable model-only or Dataset-backed
+// source analyzed to produce r.
+func (r Result) SourceIdentity() model.EffectiveSourceIdentity { return r.sourceIdentity }
 
 // Source is the changed property whose downstream consequences were analyzed.
 func (r Result) Source() address.PropertyAddress { return r.source }
@@ -157,7 +162,7 @@ func (r Result) Len() int { return len(r.affected) }
 
 // IsValid reports whether r satisfies all immutable normalized-DAG invariants.
 func (r Result) IsValid() bool {
-	if r.modelVersionID.IsZero() || !r.source.IsValid() || !r.mode.IsValid() {
+	if !r.sourceIdentity.IsValid() || !r.source.IsValid() || !r.mode.IsValid() {
 		return false
 	}
 	depths := make(map[address.PropertyAddress]int, len(r.affected)+1)

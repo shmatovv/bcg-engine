@@ -3,7 +3,6 @@ package value
 import (
 	"github.com/shmatovv/bcg-engine/internal/domain/address"
 	"github.com/shmatovv/bcg-engine/internal/domain/schema"
-	"github.com/shmatovv/bcg-engine/internal/model"
 	resolvertime "github.com/shmatovv/bcg-engine/internal/resolver/time"
 	"github.com/shmatovv/bcg-engine/internal/runtime"
 	"github.com/shmatovv/bcg-engine/internal/types/datetime"
@@ -63,7 +62,7 @@ func (o SeriesOutcome) IsValid() bool {
 // ResolveSeries selects one effective input Series snapshot. Series time stays
 // wholly inside the selected value; EffectivePeriod only chooses that snapshot.
 // Series Core v1 accepts CalculationContext.At only.
-func ResolveSeries(version model.ModelVersion, target address.PropertyAddress, context runtime.CalculationContext) (SeriesOutcome, error) {
+func ResolveSeries(version ModelSource, target address.PropertyAddress, context runtime.CalculationContext) (SeriesOutcome, error) {
 	definition, owner, err := validateSeriesTarget(version, target, context, true)
 	if err != nil {
 		return SeriesOutcome{}, err
@@ -101,7 +100,7 @@ func ResolveSeries(version model.ModelVersion, target address.PropertyAddress, c
 // ResolveSeriesCalculationOverride resolves only the highest-precedence
 // calculation override for a Series property. It is valid for Input and
 // Derived properties and is used by the Effective Evaluation Plan.
-func ResolveSeriesCalculationOverride(version model.ModelVersion, target address.PropertyAddress, context runtime.CalculationContext) (SeriesOutcome, bool, error) {
+func ResolveSeriesCalculationOverride(version ModelSource, target address.PropertyAddress, context runtime.CalculationContext) (SeriesOutcome, bool, error) {
 	definition, _, err := validateSeriesTarget(version, target, context, false)
 	if err != nil {
 		return SeriesOutcome{}, false, err
@@ -125,7 +124,7 @@ func ResolveSeriesCalculationOverride(version model.ModelVersion, target address
 
 // ResolveSeriesScenarioOverride resolves only the Scenario layer for a Series
 // property. An ambiguous matching layer is a final Undefined outcome.
-func ResolveSeriesScenarioOverride(version model.ModelVersion, target address.PropertyAddress, context runtime.CalculationContext) (SeriesOutcome, bool, error) {
+func ResolveSeriesScenarioOverride(version ModelSource, target address.PropertyAddress, context runtime.CalculationContext) (SeriesOutcome, bool, error) {
 	_, _, err := validateSeriesTarget(version, target, context, false)
 	if err != nil {
 		return SeriesOutcome{}, false, err
@@ -144,14 +143,14 @@ func ResolveSeriesScenarioOverride(version model.ModelVersion, target address.Pr
 
 // ResolveEffectiveSeriesOverride resolves Calculation then Scenario override
 // layers for a Series property, including final ambiguity outcomes.
-func ResolveEffectiveSeriesOverride(version model.ModelVersion, target address.PropertyAddress, context runtime.CalculationContext) (SeriesOutcome, bool, error) {
+func ResolveEffectiveSeriesOverride(version ModelSource, target address.PropertyAddress, context runtime.CalculationContext) (SeriesOutcome, bool, error) {
 	if outcome, found, err := ResolveSeriesCalculationOverride(version, target, context); err != nil || found {
 		return outcome, found, err
 	}
 	return ResolveSeriesScenarioOverride(version, target, context)
 }
 
-func validateSeriesTarget(version model.ModelVersion, target address.PropertyAddress, context runtime.CalculationContext, inputOnly bool) (schema.PropertyDefinition, schema.PropertyOwner, error) {
+func validateSeriesTarget(version ModelSource, target address.PropertyAddress, context runtime.CalculationContext, inputOnly bool) (schema.PropertyDefinition, schema.PropertyOwner, error) {
 	if !version.IsCommitted() {
 		return schema.PropertyDefinition{}, schema.PropertyOwner{}, newError(ErrorInvalidModelVersion, "Series resolution requires a committed ModelVersion")
 	}

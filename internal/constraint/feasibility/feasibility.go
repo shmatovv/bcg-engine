@@ -6,7 +6,6 @@ import (
 	"github.com/shmatovv/bcg-engine/internal/domain/constraint"
 	"github.com/shmatovv/bcg-engine/internal/domain/identity"
 	"github.com/shmatovv/bcg-engine/internal/evaluator"
-	"github.com/shmatovv/bcg-engine/internal/model"
 	"github.com/shmatovv/bcg-engine/internal/runtime"
 )
 
@@ -56,7 +55,7 @@ type Result struct {
 // feasibility. It uses check.All and therefore shares the normal resolver and
 // evaluator semantics; business violations and Undefined outcomes are not Go
 // errors.
-func Evaluate(version model.ModelVersion, context runtime.CalculationContext) (Result, error) {
+func Evaluate(version check.Source, context runtime.CalculationContext) (Result, error) {
 	report, err := check.All(version, context)
 	if err != nil {
 		return Result{}, err

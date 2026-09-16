@@ -6,7 +6,6 @@ import (
 	"github.com/shmatovv/bcg-engine/internal/expression/ast"
 	"github.com/shmatovv/bcg-engine/internal/expression/inference"
 	"github.com/shmatovv/bcg-engine/internal/expression/typing"
-	"github.com/shmatovv/bcg-engine/internal/model"
 	"github.com/shmatovv/bcg-engine/internal/plan"
 	"github.com/shmatovv/bcg-engine/internal/provenance"
 	resolvervalue "github.com/shmatovv/bcg-engine/internal/resolver/value"
@@ -19,11 +18,11 @@ import (
 // EvaluateSeries evaluates one Series property at one effective-time instant.
 // It keeps Effective Time in CalculationContext.At and leaves the selected
 // value's Point/Interval axis untouched.
-func EvaluateSeries(version model.ModelVersion, target address.PropertyAddress, context runtime.CalculationContext) (SeriesResult, error) {
+func EvaluateSeries(version Source, target address.PropertyAddress, context runtime.CalculationContext) (SeriesResult, error) {
 	return evaluateSeries(version, target, context)
 }
 
-func evaluateSeries(version model.ModelVersion, target address.PropertyAddress, context runtime.CalculationContext) (SeriesResult, error) {
+func evaluateSeries(version Source, target address.PropertyAddress, context runtime.CalculationContext) (SeriesResult, error) {
 	if !version.IsCommitted() {
 		return SeriesResult{}, newError(ErrorInvalidModelVersion, "Series evaluation requires a committed ModelVersion", nil)
 	}
@@ -43,7 +42,13 @@ func evaluateSeries(version model.ModelVersion, target address.PropertyAddress, 
 	if definition.TemporalMode() != schema.TemporalSeries {
 		return SeriesResult{}, newError(ErrorUnsupportedSeries, "EvaluateSeries requires a Series property target", nil)
 	}
-	effectivePlan, err := plan.Build(version, []address.PropertyAddress{target}, context)
+	var effectivePlan plan.Plan
+	var err error
+	if graph, ok := dependencyGraph(version); ok {
+		effectivePlan, err = plan.BuildWithDependencyGraph(version, graph, []address.PropertyAddress{target}, context)
+	} else {
+		effectivePlan, err = plan.Build(version, []address.PropertyAddress{target}, context)
+	}
 	if err != nil {
 		return SeriesResult{}, newError(ErrorPlanBuild, "failed to build Effective Evaluation Plan for Series evaluation", err)
 	}
@@ -56,7 +61,7 @@ func evaluateSeries(version model.ModelVersion, target address.PropertyAddress, 
 }
 
 type seriesEvaluationState struct {
-	version model.ModelVersion
+	version Source
 	context runtime.CalculationContext
 	plan    plan.Plan
 
@@ -76,7 +81,7 @@ type seriesEvaluationState struct {
 	expressionDepth int
 }
 
-func newSeriesEvaluationState(version model.ModelVersion, context runtime.CalculationContext, effectivePlan plan.Plan) *seriesEvaluationState {
+func newSeriesEvaluationState(version Source, context runtime.CalculationContext, effectivePlan plan.Plan) *seriesEvaluationState {
 	scalar := &evaluationState{
 		version: version, context: context, effectivePlan: effectivePlan,
 		memo: make(map[address.PropertyAddress]Result), visiting: make(map[address.PropertyAddress]struct{}),

@@ -18,6 +18,8 @@ type Scenario struct {
 	name string
 
 	baseModelVersionID identity.UUID
+	baseDatasetID      identity.UUID
+	hasBaseDataset     bool
 
 	overrides []Override
 }
@@ -41,6 +43,23 @@ func New(
 	baseModelVersionID identity.UUID,
 	overrides []Override,
 ) Scenario {
+	return newScenario(id, name, baseModelVersionID, identity.UUID{}, false, overrides)
+}
+
+// NewForDataset constructs a runtime-only Scenario bound to one exact
+// Dataset in addition to its ModelVersion.
+func NewForDataset(id identity.UUID, name string, baseModelVersionID, datasetID identity.UUID, overrides []Override) Scenario {
+	return newScenario(id, name, baseModelVersionID, datasetID, true, overrides)
+}
+
+func newScenario(
+	id identity.UUID,
+	name string,
+	baseModelVersionID identity.UUID,
+	datasetID identity.UUID,
+	hasDataset bool,
+	overrides []Override,
+) Scenario {
 	if id.IsZero() {
 		panic("scenario: id must not be zero")
 	}
@@ -52,6 +71,12 @@ func New(
 	if baseModelVersionID.IsZero() {
 		panic("scenario: base ModelVersion id must not be zero")
 	}
+	if hasDataset && datasetID.IsZero() {
+		panic("scenario: base Dataset id must not be zero")
+	}
+	if !hasDataset {
+		datasetID = identity.UUID{}
+	}
 
 	copiedOverrides := cloneAndValidateOverrides(overrides)
 
@@ -59,6 +84,8 @@ func New(
 		id:                 id,
 		name:               name,
 		baseModelVersionID: baseModelVersionID,
+		baseDatasetID:      datasetID,
+		hasBaseDataset:     hasDataset,
 		overrides:          copiedOverrides,
 	}
 }
@@ -77,6 +104,10 @@ func (s Scenario) Name() string {
 func (s Scenario) BaseModelVersionID() identity.UUID {
 	return s.baseModelVersionID
 }
+
+// BaseDatasetID returns the exact Dataset required by a Dataset-bound
+// Scenario. Model-only Scenarios return false and remain portable.
+func (s Scenario) BaseDatasetID() (identity.UUID, bool) { return s.baseDatasetID, s.hasBaseDataset }
 
 // Overrides returns a defensive copy of all Scenario overrides.
 func (s Scenario) Overrides() []Override {
@@ -103,6 +134,9 @@ func (s Scenario) IsValid() bool {
 		s.baseModelVersionID.IsZero() {
 		return false
 	}
+	if s.hasBaseDataset != !s.baseDatasetID.IsZero() {
+		return false
+	}
 
 	for _, override := range s.overrides {
 		if !override.IsValid() {
@@ -121,6 +155,8 @@ func (s Scenario) Equal(other Scenario) bool {
 		s.id != other.id ||
 		s.name != other.name ||
 		s.baseModelVersionID != other.baseModelVersionID ||
+		s.baseDatasetID != other.baseDatasetID ||
+		s.hasBaseDataset != other.hasBaseDataset ||
 		len(s.overrides) != len(other.overrides) {
 		return false
 	}

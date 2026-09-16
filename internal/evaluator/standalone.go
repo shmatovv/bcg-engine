@@ -7,7 +7,6 @@ import (
 	"github.com/shmatovv/bcg-engine/internal/expression/inference"
 	"github.com/shmatovv/bcg-engine/internal/expression/typing"
 	"github.com/shmatovv/bcg-engine/internal/graph/dependency"
-	"github.com/shmatovv/bcg-engine/internal/model"
 	"github.com/shmatovv/bcg-engine/internal/plan"
 	resolvervalue "github.com/shmatovv/bcg-engine/internal/resolver/value"
 	"github.com/shmatovv/bcg-engine/internal/runtime"
@@ -23,7 +22,7 @@ import (
 //
 // Constraint applicability/assertion evaluation uses this API.
 func EvaluateExpression(
-	version model.ModelVersion,
+	version Source,
 	expression ast.Expression,
 	context runtime.CalculationContext,
 ) (Result, error) {
@@ -35,11 +34,11 @@ func EvaluateExpression(
 	var effectivePlan plan.Plan
 
 	if len(dependencies) > 0 {
-		effectivePlan, err = plan.Build(
-			version,
-			dependencies,
-			context,
-		)
+		if graph, ok := dependencyGraph(version); ok {
+			effectivePlan, err = plan.BuildWithDependencyGraph(version, graph, dependencies, context)
+		} else {
+			effectivePlan, err = plan.Build(version, dependencies, context)
+		}
 		if err != nil {
 			return Result{},
 				newError(
@@ -66,7 +65,7 @@ func EvaluateExpression(
 // complete effective plan and concrete-property cache owned by the runtime
 // Session. It never creates an implicit self binding.
 func evaluateStandaloneWithEnvironment(
-	version model.ModelVersion,
+	version Source,
 	expression ast.Expression,
 	context runtime.CalculationContext,
 	effectivePlan plan.Plan,
@@ -89,7 +88,7 @@ func evaluateStandaloneWithEnvironment(
 }
 
 func prepareStandaloneExpression(
-	version model.ModelVersion,
+	version Source,
 	expression ast.Expression,
 	context runtime.CalculationContext,
 ) (typing.Type, []address.PropertyAddress, error) {
@@ -162,7 +161,7 @@ func prepareStandaloneExpression(
 }
 
 func evaluatePreparedStandaloneExpression(
-	version model.ModelVersion,
+	version Source,
 	expression ast.Expression,
 	context runtime.CalculationContext,
 	staticType typing.Type,

@@ -29,6 +29,18 @@ import (
 // 12. concrete value dependency extraction and cycle detection;
 // 13. base value bindings.
 func (d *Draft) Validate() ValidationReport {
+	return d.validate(true)
+}
+
+// validateWithoutDependencyGraph performs every ordinary authored-model
+// validation pass except concrete dependency extraction. Dataset construction
+// uses it to validate the combined semantic data without constructing a graph
+// that belongs to the later immutable EvaluationSource.
+func (d *Draft) validateWithoutDependencyGraph() ValidationReport {
+	return d.validate(false)
+}
+
+func (d *Draft) validate(includeDependencyGraph bool) ValidationReport {
 	d.requireNonNil()
 
 	var report ValidationReport
@@ -85,10 +97,12 @@ func (d *Draft) Validate() ValidationReport {
 		indexes,
 	)
 
-	d.validateDependencyGraph(
-		&report,
-		indexes,
-	)
+	if includeDependencyGraph {
+		d.validateDependencyGraph(
+			&report,
+			indexes,
+		)
+	}
 
 	d.validateValueBindings(
 		&report,

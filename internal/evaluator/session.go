@@ -28,7 +28,7 @@ import (
 // compute the same property more than once, but only complete immutable
 // Results are ever published or returned.
 type Session struct {
-	version model.ModelVersion
+	version Source
 	graph   dependency.Graph
 
 	mu      sync.Mutex
@@ -67,10 +67,10 @@ func (s CacheStats) Misses() uint64        { return s.misses }
 func (s CacheStats) Invalidations() uint64 { return s.invalidations }
 func (s CacheStats) Entries() int          { return s.entries }
 
-// NewSession creates a runtime cache owner for one committed ModelVersion.
-// The immutable concrete dependency graph is built once here and reused for
-// every effective-plan transition in this Session.
-func NewSession(version model.ModelVersion) (*Session, error) {
+// NewSession creates a runtime cache owner for one committed immutable source.
+// The concrete dependency graph is built once here and reused for every
+// effective-plan transition in this Session.
+func NewSession(version Source) (*Session, error) {
 	if !version.IsCommitted() {
 		return nil, newError(
 			ErrorInvalidModelVersion,
@@ -91,11 +91,23 @@ func NewSession(version model.ModelVersion) (*Session, error) {
 	return &Session{version: version, graph: graph}, nil
 }
 
+// NewSessionWithDependencyGraph binds a Session to a source whose immutable
+// combined graph was already validated and built by its snapshot owner.
+func NewSessionWithDependencyGraph(version Source, graph dependency.Graph) (*Session, error) {
+	if !version.IsCommitted() {
+		return nil, newError(ErrorInvalidModelVersion, "evaluation session requires a committed ModelVersion", nil)
+	}
+	return &Session{version: version, graph: graph}, nil
+}
+
 // ModelVersion returns the immutable snapshot to which s is bound.
 func (s *Session) ModelVersion() model.ModelVersion {
 	s.requireValid()
-	return s.version
+	return s.version.ModelVersion()
 }
+
+// Source returns the fixed effective source to which the Session is bound.
+func (s *Session) Source() Source { s.requireValid(); return s.version }
 
 // Evaluate evaluates one scalar property through the ordinary evaluator while
 // reusing this Session's current-environment property cache.
@@ -291,7 +303,7 @@ func (s *Session) prepare(context runtime.CalculationContext) (*sessionEnvironme
 }
 
 func newSessionEvaluationState(
-	version model.ModelVersion,
+	version Source,
 	context runtime.CalculationContext,
 	environment *sessionEnvironment,
 ) evaluationState {

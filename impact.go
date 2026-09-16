@@ -38,6 +38,8 @@ func (e ImpactEdge) To() PropertyAddress { return e.to }
 // ImpactResult is a deterministic, immutable downstream consequence report.
 type ImpactResult struct {
 	modelVersionID ID
+	datasetID      ID
+	hasDataset     bool
 	source         PropertyAddress
 	mode           ImpactMode
 	affected       []ImpactAffected
@@ -46,6 +48,10 @@ type ImpactResult struct {
 
 // ModelVersionID returns the model version used for this analysis.
 func (r ImpactResult) ModelVersionID() ID { return r.modelVersionID }
+
+// DatasetID returns the optional exact Dataset used for this analysis.
+// Model-only impact results return false.
+func (r ImpactResult) DatasetID() (ID, bool) { return r.datasetID, r.hasDataset }
 
 // Source returns the property from which downstream impact was analyzed.
 func (r ImpactResult) Source() PropertyAddress { return r.source }
@@ -66,6 +72,9 @@ func (r ImpactResult) Len() int { return len(r.affected) }
 
 func impactResultFromInternal(value impact.Result) ImpactResult {
 	result := ImpactResult{modelVersionID: idFromInternal(value.ModelVersionID()), source: addressFromInternal(value.Source()), mode: impactModeFromInternal(value.Mode())}
+	if datasetID, ok := value.SourceIdentity().DatasetID(); ok {
+		result.datasetID, result.hasDataset = idFromInternal(datasetID), true
+	}
 	affected := value.Affected()
 	result.affected = make([]ImpactAffected, len(affected))
 	for i, item := range affected {

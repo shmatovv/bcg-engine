@@ -5,13 +5,31 @@ import (
 	"sort"
 
 	"github.com/shmatovv/bcg-engine/internal/domain/address"
+	"github.com/shmatovv/bcg-engine/internal/domain/identity"
 	domainscenario "github.com/shmatovv/bcg-engine/internal/domain/scenario"
 	"github.com/shmatovv/bcg-engine/internal/domain/schema"
+	"github.com/shmatovv/bcg-engine/internal/domain/scope"
 	"github.com/shmatovv/bcg-engine/internal/domain/semantic"
 	"github.com/shmatovv/bcg-engine/internal/model"
 	"github.com/shmatovv/bcg-engine/internal/types/series"
 	"github.com/shmatovv/bcg-engine/internal/types/unit"
 )
+
+// Source is the concrete immutable data needed to validate an overlay. It is
+// intentionally smaller than an evaluator source and supports both a plain
+// ModelVersion and a combined runtime source.
+type Source interface {
+	IsCommitted() bool
+	ID() identity.UUID
+	SourceIdentity() model.EffectiveSourceIdentity
+	Entity(identity.UUID) (semantic.Entity, bool)
+	Relation(identity.UUID) (semantic.Relation, bool)
+	EntityType(identity.UUID) (schema.EntityType, bool)
+	RelationType(identity.UUID) (schema.RelationType, bool)
+	PropertyDefinition(identity.UUID) (schema.PropertyDefinition, bool)
+	PropertyContract(identity.UUID) (schema.PropertyContract, bool)
+	ScopeDefinition(identity.UUID) (scope.Definition, bool)
+}
 
 // ValidationIssueKind identifies one Scenario compatibility failure.
 type ValidationIssueKind uint8
@@ -301,7 +319,7 @@ func (r *ValidationReport) sortDeterministically() {
 //
 // Validate never mutates ModelVersion or Scenario.
 func Validate(
-	version model.ModelVersion,
+	version Source,
 	candidate domainscenario.Scenario,
 ) ValidationReport {
 	var report ValidationReport
@@ -342,6 +360,12 @@ func Validate(
 			),
 		)
 	}
+	if datasetID, bound := candidate.BaseDatasetID(); bound {
+		sourceDatasetID, hasDataset := version.SourceIdentity().DatasetID()
+		if !hasDataset || sourceDatasetID != datasetID {
+			report.append(newIssue(ValidationIssueBaseModelVersionMismatch, "Scenario is bound to a different Dataset"))
+		}
+	}
 
 	for _, override := range candidate.Overrides() {
 
@@ -359,7 +383,7 @@ func Validate(
 
 func validateOverride(
 	report *ValidationReport,
-	version model.ModelVersion,
+	version Source,
 	override domainscenario.Override,
 ) {
 	target :=
@@ -438,7 +462,7 @@ func validateOverride(
 
 func validateOverrideValue(
 	report *ValidationReport,
-	version model.ModelVersion,
+	version Source,
 	target address.PropertyAddress,
 	definition schema.PropertyDefinition,
 	bindingValue semantic.BindingValue,
@@ -581,7 +605,7 @@ func overrideHasUnit(definition schema.PropertyDefinition) bool {
 	return hasUnit
 }
 
-func overrideAllowsNull(version model.ModelVersion, definition schema.PropertyDefinition) bool {
+func overrideAllowsNull(version Source, definition schema.PropertyDefinition) bool {
 	contractID, hasContract := definition.ContractID()
 	if !hasContract {
 		return false
@@ -592,7 +616,7 @@ func overrideAllowsNull(version model.ModelVersion, definition schema.PropertyDe
 
 func validateOverrideScope(
 	report *ValidationReport,
-	version model.ModelVersion,
+	version Source,
 	target address.PropertyAddress,
 	override domainscenario.Override,
 ) {
@@ -678,7 +702,7 @@ func validateOverridePeriod(
 }
 
 func ownerForObject(
-	version model.ModelVersion,
+	version Source,
 	object address.ObjectRef,
 ) (schema.PropertyOwner, bool) {
 	switch object.Kind() {

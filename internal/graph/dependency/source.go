@@ -19,6 +19,12 @@ type Source interface {
 	Entities() []semantic.Entity
 	Relations() []semantic.Relation
 
+	// OutgoingRelations and IncomingRelations are semantic traversal indexes.
+	// They keep aggregate dependency extraction proportional to a traversed
+	// neighbourhood rather than to every Relation in a large runtime Dataset.
+	OutgoingRelations(entityID identity.UUID, relationTypeID identity.UUID) []semantic.Relation
+	IncomingRelations(entityID identity.UUID, relationTypeID identity.UUID) []semantic.Relation
+
 	EntityType(
 		id identity.UUID,
 	) (schema.EntityType, bool)

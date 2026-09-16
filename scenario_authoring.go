@@ -68,17 +68,20 @@ func (o ScenarioOverride) EffectivePeriod() (EffectivePeriod, bool) {
 func (o ScenarioOverride) IsValid() bool { return o.value.IsValid() }
 
 // ScenarioSpec describes an immutable overlay. Base-version ownership is
-// supplied by NewScenario's committed Model parameter instead of a mutable
-// exposed version reference.
+// supplied by NewScenario's committed Model parameter, or by
+// EvaluationSnapshot.NewScenario when an override targets runtime Dataset
+// data, instead of a mutable exposed version reference.
 type ScenarioSpec struct {
 	ID        ID
 	Name      string
 	Overrides []ScenarioOverride
 }
 
-// NewScenario constructs an immutable Scenario tied to base's exact committed
-// ModelVersion. It validates every override with the existing authoritative
-// Scenario validation machinery before returning it.
+// NewScenario constructs a portable model-only Scenario tied to base's exact
+// committed ModelVersion. Dataset-owned targets require
+// EvaluationSnapshot.NewScenario, which creates a runtime-only
+// Dataset-bound Scenario. It validates every override with the existing
+// authoritative Scenario validation machinery before returning it.
 func NewScenario(base Model, spec ScenarioSpec) (Scenario, error) {
 	if !base.IsValid() {
 		return Scenario{}, fmt.Errorf("%w: committed base Model is required", ErrInvalidArgument)
@@ -124,6 +127,9 @@ func (s Scenario) Overrides() []ScenarioOverride {
 func (s Scenario) WithOverrides(base Model, overrides ...ScenarioOverride) (Scenario, error) {
 	if !s.IsValid() {
 		return Scenario{}, fmt.Errorf("%w: Scenario is invalid", ErrInvalidArgument)
+	}
+	if _, datasetBound := s.BaseDatasetID(); datasetBound {
+		return Scenario{}, fmt.Errorf("%w: Dataset-bound Scenario must be replaced through EvaluationSnapshot.NewScenario", ErrInvalidArgument)
 	}
 	if !base.IsValid() || !s.BaseVersionID().Equal(base.VersionID()) {
 		return Scenario{}, fmt.Errorf("%w: Scenario belongs to a different ModelVersion", ErrInvalidArgument)

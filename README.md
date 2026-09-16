@@ -1,5 +1,14 @@
 # BCG Engine
 
+[English](#english-reference) · [Русский](#русская-справка)
+
+> **Runtime Dataset API.** This README documents the complete public Go API
+> for the current engine, including immutable external runtime datasets. The
+> `.bcg` wire-format contract is intentionally documented separately in
+> [`docs/bcg-format-v1.md`](docs/bcg-format-v1.md).
+
+<a id="english-reference"></a>
+
 BCG Engine is a deterministic Go calculation engine for immutable business
 models. A committed model is exchanged as a canonical `.bcg` JSON artifact;
 the public package provides lifecycle authoring, evaluation, explanation,
@@ -396,3 +405,850 @@ go test -race ./...
 go vet ./...
 go test -shuffle=on -count=20 ./...
 ```
+
+## Evaluation API and result contract
+
+Every evaluation entry point takes a `PropertyAddress` and a
+`CalculationContext`. `EntityProperty(entityID, definitionID)` and
+`RelationProperty(relationID, definitionID)` construct the two address forms.
+An address identifies a concrete object property; it is not a schema property
+definition by itself.
+
+`CalculationContext` supplies the temporal coordinate or requested period,
+scope selections, an optional `Scenario`, and temporary calculation
+overrides. Create it with `NewCalculationContextAt` for a scalar instant or
+`NewCalculationContextPeriod` for a requested interval, then derive a new
+immutable context with:
+
+- `WithScopes(selectors...)`, where each selector comes from
+  `NewScopeSelector(scopeDefinitionID, value)`;
+- `WithScenario(scenario)` or `WithoutScenario()`;
+- `WithCalculationOverrides(overrides...)`, where `NewOverride` and
+  `NullOverride` create the temporary values.
+
+Context values are immutable. An override is not a persisted binding and is
+never written into a `Model`, `Dataset`, or `.bcg` artifact. At a concrete
+property target the effective precedence is always:
+
+```text
+CalculationOverride > ScenarioOverride > object ValueBinding
+                    > type ValueBinding > missing / Undefined
+```
+
+The common scalar APIs are intentionally parallel on `Model`,
+`EvaluationSnapshot`, and `Session` (a Session stores its context, so its
+methods omit that argument):
+
+| Need | Stateless Model | Model + Dataset snapshot | Reusable Session |
+| --- | --- | --- | --- |
+| One scalar value | `Evaluate(target, context)` | `snapshot.Evaluate(target, context)` | `session.Evaluate(target)` |
+| Several scalar values | `EvaluateMany(targets, context)` | `snapshot.EvaluateMany(targets, context)` | `session.EvaluateMany(targets)` |
+| A series | `EvaluateSeries(target, context)` | `snapshot.EvaluateSeries(target, context)` | `session.EvaluateSeries(target)` |
+| Scalar provenance | `Explain(target, context)` | `snapshot.Explain(target, context)` | `session.Explain(target)` |
+| Series provenance | `ExplainSeries(target, context)` | `snapshot.ExplainSeries(target, context)` | — |
+| Downstream impact | `AnalyzeImpact(mode, target, context)` | `snapshot.AnalyzeImpact(...)` | `session.AnalyzeImpact(mode, target)` |
+
+`Result` is a normal business outcome, not an error channel. Always branch on
+`State()`:
+
+| State | Meaning | Read it with |
+| --- | --- | --- |
+| `Defined` | A typed value is available. | `Value() (Value, bool)` |
+| `Null` | An applicable nullable binding explicitly states known absence. | The state itself |
+| `Undefined` | No usable value or an evaluable business condition prevented a value. | `Undefined() (UndefinedInfo, bool)` |
+
+`UndefinedInfo.Kind()` distinguishes stable causes: `MissingValue`,
+`AmbiguousValue`, `DependencyUndefined`, `EmptyAggregation`,
+`IndeterminateCondition`, `InvalidOperation`, `ExternalUnavailable`, and
+`DivisionByZero`. A non-nil Go error means a malformed call, invalid context,
+or engine failure; it is not the representation for a missing business value.
+
+`SeriesResult` is distinct from authored `SourceSeries`. A defined result has
+either `PointSeries` values through `Points()` or `IntervalSeries` values
+through `Intervals()`; a whole-series failure is exposed by `IsUndefined()`
+and `Undefined()`. `SeriesPoint` and `SeriesInterval` each retain a scalar
+`Result`, so individual samples can be Defined, Null, or Undefined.
+
+### Explain and impact
+
+`Explain` and `ExplainSeries` return actual execution provenance, not a
+reconstructed AST. Start at `Explanation.Root()` and walk ordered
+`ExplanationNode.Children()`. A node can expose its property, operation,
+decision, result state/value/undefined reason, applied calculation override,
+Scenario ID, or aggregate item (`relationID`, `relatedEntityID`) where
+applicable. Duplicate expression occurrences are intentionally retained.
+
+`AnalyzeImpact` produces a deterministic downstream report. Pick one mode:
+
+- `StructuralImpact` uses all statically possible dependency edges.
+- `EffectiveImpact` uses the selected time, scopes, Scenario, and override
+  layer to prune dependencies that cannot currently apply.
+- `ObservedImpact` uses dependencies actually observed while evaluating.
+
+`ImpactResult` includes the exact `ModelVersionID`, the optional `DatasetID`,
+the source address, ordered `Affected()` items with minimum depth, and direct
+`Edges()`. `ImpactAffected.IsDirect()` is shorthand for a minimum depth of 1.
+
+### Constraints, feasibility, and rules
+
+Constraints and Rules are declarations owned by the committed Model. They can
+read Dataset data when evaluated through a snapshot, but a Dataset does not
+define new constraints, rules, or quantified "for every object" declarations.
+
+| API | Result |
+| --- | --- |
+| `CheckConstraint(id, context)` | One `ConstraintResult` |
+| `CheckConstraints(context)` | Deterministic `ConstraintReport` |
+| `CheckFeasibility(context)` | `FeasibilityResult` over all Hard constraints |
+| `EvaluateRule(id, context)` | One `RuleResult` |
+| `EvaluateRules(context)` | Deterministic `RuleReport` |
+
+The same methods are available on `EvaluationSnapshot`; `Session` provides
+`CheckConstraints`, `CheckFeasibility`, `EvaluateRule`, and `EvaluateRules`
+without an explicit context. Constraint states are `Satisfied`, `Violated`,
+`NotApplicable`, and `Undefined`; `ConstraintResult` retains only the
+applicability/assertion evaluations that ran. `FeasibilityResult.State()` is
+`Feasible`, `Infeasible`, or `Undetermined` and considers only constraints
+with `SeverityHard`. Rules are pure named Boolean decisions with state
+`RuleActive`, `RuleInactive`, or `RuleUndefined`; they have no side effects.
+
+## External immutable runtime datasets
+
+Use a Dataset when the model supplies schema and calculation semantics while
+concrete operational objects and their base values are supplied at runtime.
+The model remains unchanged when external data changes:
+
+```text
+committed Model version + immutable Dataset = EvaluationSnapshot
+```
+
+This is deliberately not lazy loading. The embedded model data plus the
+Dataset form one complete evaluation graph: a relation absent from both is
+absent, and a missing object binding falls back to a model type binding or to
+`Undefined` in the ordinary way.
+
+### Dataset lifecycle
+
+`NewDatasetBuilder(baseModel, datasetID)` requires a committed `Model` and a
+non-zero caller-supplied snapshot ID. The ID identifies one immutable content
+snapshot; BCG does not maintain a global ID registry, so callers **must never
+reuse one Dataset ID for changed content**.
+
+```go
+builder, err := bcg.NewDatasetBuilder(model, datasetID)
+if err != nil {
+	return err
+}
+
+order, err := bcg.NewEntity(bcg.EntitySpec{ID: orderID, TypeID: orderTypeID})
+if err != nil {
+	return err
+}
+if err := builder.AddEntity(order); err != nil {
+	return err
+}
+
+quantityAddress, err := bcg.EntityProperty(orderID, quantityDefinitionID)
+if err != nil {
+	return err
+}
+quantityTarget, err := bcg.ObjectPropertyBindingTarget(quantityAddress)
+if err != nil {
+	return err
+}
+quantityValue, err := bcg.DefinedBindingValue(
+	bcg.DecimalValue(bcg.MustParseDecimal("10")),
+)
+if err != nil {
+	return err
+}
+quantity, err := bcg.NewValueBinding(bcg.ValueBindingSpec{
+	Target: quantityTarget, Value: quantityValue,
+})
+if err != nil {
+	return err
+}
+if err := builder.AddValueBinding(quantity); err != nil {
+	return err
+}
+
+// Add the price binding in the same way, then inspect every issue before build.
+report, err := builder.Validate()
+if err != nil {
+	return err
+}
+if !report.OK() {
+	return fmt.Errorf("dataset invalid: %#v", report.Issues())
+}
+dataset, err := builder.Build()
+if err != nil {
+	return err // a ValidationError carries the deterministic issues
+}
+
+snapshot, err := model.WithDataset(dataset)
+if err != nil {
+	return err
+}
+totalAddress, err := bcg.EntityProperty(orderID, totalDefinitionID)
+if err != nil {
+	return err
+}
+total, err := snapshot.Evaluate(totalAddress, calculation)
+// With total = quantity * price and price = 500, total is Decimal(5000).
+```
+
+`DatasetBuilder` is mutable and not safe for concurrent use. A successful
+`Build` seals it. `Dataset` is immutable and safe for concurrent reads; its
+`Entities`, `Relations`, and `ValueBindings` methods return deterministic
+defensive slices, while `Entity(id)` and `Relation(id)` provide indexed
+lookups. `ID`, `ModelVersionID`, and `IsValid` identify/inspect the snapshot.
+
+The builder accepts only existing public `Entity`, `Relation`, and
+object-property `ValueBinding` values. Validation uses the same report and
+issue machinery as a draft, and rejects:
+
+- zero/duplicate IDs, collisions with embedded model entities or relations,
+  and unknown entity/relation types;
+- absent endpoints or endpoint types/traits incompatible with the
+  `RelationType`;
+- type-level bindings, bindings to embedded model objects, unknown or
+  mismatched properties, and base bindings for Derived properties;
+- scalar/series, value type, unit, nullability, scope, period, and selector
+  mismatches, plus conflicting object-binding candidates;
+- a Dataset relation whose two endpoints are both embedded model entities.
+
+Dataset relations may connect Dataset-to-Dataset, Dataset-to-embedded, or
+embedded-to-Dataset entities. They participate in forward, reverse, and
+`TraverseBoth` relation traversal, aggregate filter/map execution, Explain,
+Impact, constraints, and rules. Relation property bindings are allowed when
+the relation itself is Dataset-owned. A Dataset can never override an embedded
+model object's property; use a Scenario or a calculation override for a
+temporary alternative.
+
+### EvaluationSnapshot and source identity
+
+`Model.WithDataset(dataset)` requires `dataset.ModelVersionID()` to equal the
+**exact** `Model.VersionID()`. It builds and retains the combined dependency
+graph once and rejects a runtime topology that introduces a dependency cycle.
+It does not clone the entire Model or Dataset.
+
+`EvaluationSnapshot` is an immutable façade with `Model()`, `Dataset()`,
+`ModelVersionID()`, `DatasetID()`, and `IsValid()`, plus the full stateless
+evaluation API listed above. Do not call `snapshot.Model().Evaluate(...)` if
+you mean to use external data: that deliberately executes the model-only
+world. Call the matching method on the snapshot.
+
+Internally, reusable runtime work is tied to an effective source identity:
+
+```text
+model-only source:       ModelVersionID
+dataset-backed source:   ModelVersionID + DatasetID
+```
+
+Consequently a plan, observed impact result, or Session from Dataset A cannot
+be used for Dataset B even when both refer to the same Model version and have
+coincidentally identical object IDs. A newly built Dataset always requires a
+new snapshot and, for cached evaluation, a new Session.
+
+### Dataset-aware Scenarios and sessions
+
+`NewScenario(model, spec)` continues to create portable model-only scenarios.
+`snapshot.NewScenario(spec)` is the authoring entry point when any override
+targets a Dataset-owned object. A Scenario with only model-owned targets is
+still model-only/portable even if it was created through a snapshot; a mixed
+scenario becomes Dataset-bound. Inspect `Scenario.BaseVersionID()` and the
+optional `BaseDatasetID()`.
+
+Dataset-bound Scenarios are runtime-only: they must be evaluated with the
+same Dataset ID, cannot be used with another Dataset that happens to reuse an
+object ID, and `NewArtifact` rejects them. `.bcg` remains a portable
+self-contained Model plus model-only Scenario artifact; Dataset bytes are not
+serialized.
+
+`Model.NewSession(context)` makes a model-only Session;
+`snapshot.NewSession(context)` binds one to the snapshot's fixed Dataset.
+`Session.Dataset()` reports the optional Dataset. All Session methods are safe
+for concurrent use, but the Dataset cannot be replaced. `SetCalculationContext`
+changes time/scopes/scenario/overrides, `SetCalculationOverrides` replaces only
+temporary overrides, `Reset` drops the cache generation, and `CacheStats`
+returns read-only hits/misses/invalidations/entries diagnostics.
+
+## Public API reference
+
+This index names every exported public concept. Constructors return immutable
+value objects unless their name says `Builder`, `Draft`, or `Session`.
+Collection accessors documented as owned return a copy, so callers may safely
+reorder or append to it.
+
+### Identities, values, dimensions, and units
+
+| Area | API | Notes |
+| --- | --- | --- |
+| IDs | `NewID`, `ParseID`, `MustParseID`, `ID.String`, `IsZero`, `Equal` | IDs are explicit UUID value objects. Avoid `MustParseID` for untrusted input. |
+| Schema value kinds | `ValueType`: `BoolType`, `IntegerType`, `DecimalType`, `StringType`, `DateType`, `DateTimeType`, `DurationType` | Use `IsValid`/`String` for validation and display. |
+| Temporal schema mode | `TemporalScalar`, `TemporalSeries` | A property is scalar or series; authored source and runtime result types are separate. |
+| Scalar values | `Bool`, `Integer`, `Int64`, `DecimalValue`, `String`, `DateValue`, `DateTimeValue`, `DurationValue` | `Value.Type`, `Kind`, typed accessor methods, `Unit`, `WithUnit`, and `IsValid` inspect a value. |
+| Exact primitives | `ParseDecimal`, `ParseDate`, `ParseDateTime`, `ParseDuration` and `MustParseDecimal` | Decimal and conversion arithmetic avoids `float64`. |
+| Dimensions | `NewBaseDimension`, `NewDimension`, `DimensionlessDimension` | `DimensionFactor` uses an integer exponent; inspect with `Factors`, `Equal`, `IsDimensionless`. |
+| Rational scales | `NewRational`, `RationalFromInt64`, `OneRational` | Numerator/denominator are strings to preserve exact arbitrary precision. |
+| Units | `NewUnit`, `NewComposedUnit`, `DimensionlessUnit` | Inspect with `Dimension`, `Scale`, `Factors`, `ConversionFactors`, `CanConvertTo`, `Equal`. |
+
+`NewUnit(id, dimension, symbol, scale)` makes a simple named unit.
+`NewComposedUnit(factors, conversionSpace, conversionFactors, scale, symbol)`
+creates the complete canonical compound representation. A zero unit is absent;
+`DimensionlessUnit()` is an explicit dimensionless unit. `UnitFactor` and
+`ConversionFactor` are value structs validated by `IsValid`.
+
+### Schema declarations
+
+| Declaration | Construct with | Key fields and accessors |
+| --- | --- | --- |
+| Entity class | `NewEntityType(EntityTypeSpec)` | `ID`, `Name`, required `Traits`, available `PropertyDefinitions` |
+| Relation class | `NewRelationType(RelationTypeSpec)` | `ID`, `Name`, optional `From`/`To` endpoint constraints, property definitions |
+| Property ownership | `EntityTypeOwner`, `RelationTypeOwner` | `PropertyOwner` supplies `Kind`, `ID`, `IsValid` |
+| Property | `NewPropertyDefinition(PropertyDefinitionSpec)` | owner, optional contract, name, `ValueType`, optional `Unit`, `TemporalMode`, `Computation` |
+| Contract | `NewPropertyContract(PropertyContractSpec)` | name/type, optional dimension, temporal mode, nullable flag |
+| Trait | `NewTrait(TraitSpec)` | name and required property-contract IDs |
+| Scope dimension | `NewScopeDefinition(ScopeDefinitionSpec)` | name and selector value type |
+
+`PropertyComputation` is made with `InputComputation()` or
+`DerivedComputation(expression)` and exposes `Kind()` and optional
+`Expression()`. Relation endpoints can be omitted, constrained with
+`EntityTypeEndpoint` or `TraitEndpoint`, or explicitly unrestricted with
+`AnyEntityEndpoint`; inspect `EndpointConstraint.Kind`, `ID`, `IsPresent`, and
+`IsValid`. The zero endpoint means *omitted*, not `AnyEntity`.
+
+`EntityTypeSpec`, `RelationTypeSpec`, `PropertyDefinitionSpec`,
+`PropertyContractSpec`, `TraitSpec`, and `ScopeDefinitionSpec` carry IDs and
+the corresponding fields above. Their constructors perform local structural
+checks; cross-references, owner compatibility, expression typing, and model
+invariants are checked by `Draft.Validate`/`Commit`.
+
+### Expressions and traversals
+
+`Expression` is opaque/immutable. Build literals and references with
+`Constant`, `SelfProperty`, `AbsoluteProperty`, `BoundProperty`, and
+`BoundContractProperty`; inspect only `IsValid` and `Depth`.
+
+| Expression family | Constructors |
+| --- | --- |
+| Arithmetic | `Add`, `Subtract`, `Multiply`, `Divide`, `Negate` |
+| Comparison | `Equal`, `NotEqual`, `Less`, `LessOrEqual`, `Greater`, `GreaterOrEqual` |
+| Boolean/control | `And`, `Or`, `Not`, `If`, `IsNull`, `Coalesce` |
+| Traversal sources | `SelfTraversal`, `AbsoluteEntityTraversal`, `BoundEntityTraversal` |
+| Aggregation | `Count`, `FilteredCount`, `Aggregate`, `FilteredAggregate` |
+
+`AggregateBinding` is `BoundEntity` or `BoundRelation`; bound references are
+legal only in aggregate map/filter lexical scope. `TraversalDirection` is
+`TraverseOutgoing`, `TraverseIncoming`, or `TraverseBoth`; `TraversalSource`
+also records `TraversalOrigin` (`SelfTraversalOrigin`,
+`AbsoluteEntityTraversalOrigin`, `BoundEntityTraversalOrigin`) and the
+`RelationTypeID`. `AggregateOperation` is `AggregateSum`, `AggregateAverage`,
+`AggregateMin`, or `AggregateMax`; `RequiresMap` is false for Count. All
+cross-reference and aggregate typing checks remain authoritative at model
+validation time.
+
+### Semantic objects and persistent data
+
+| Object | Construct with | Important behavior |
+| --- | --- | --- |
+| Entity | `NewEntity(EntitySpec)` | Explicit `ID`, `TypeID`, optional name. Values are separate bindings. |
+| Relation | `NewRelation(RelationSpec)` | Directed `From` → `To`, type, optional Boolean applicability expression. |
+| Binding target | `ObjectPropertyBindingTarget`, `TypePropertyBindingTarget` | Object target vs model type default. Inspect `Kind`, `ObjectProperty`, `TypeProperty`. |
+| Binding value | `DefinedBindingValue`, `NullBindingValue`, `SeriesBindingValue` | Defined scalar, explicit null, or immutable source series. |
+| Binding | `NewValueBinding(ValueBindingSpec)` | Target + binding value + canonical scopes + optional effective period. |
+| Key | `ValueBinding.Key()` | A binding has no independent UUID; target/scopes/period form its identity. |
+
+`EffectivePeriod` is half-open `[from, to)` with optional bounds; make it with
+`NewEffectivePeriod`. A nil period pointer in `ValueBindingSpec`/override spec
+means no time selector. Scope selector order is canonicalized, and
+`ValueBindingKey.Equal` compares the canonical compound identity.
+
+For source series, use `DefinedSourceSample`/`NullSourceSample`, then
+`NewSourcePoint` or `NewSourceInterval`, and finally
+`NewPointSourceSeries` or `NewIntervalSourceSeries`. Point coordinates must
+strictly increase. Intervals must be ordered, non-overlapping half-open
+ranges; adjacent intervals are valid. `SourceSeries` owns its input, exposes
+axis/type/unit and ordered copied samples, and is not a `SeriesResult`.
+
+### Model lifecycle, read API, and draft mutation
+
+| Lifecycle | API | Contract |
+| --- | --- | --- |
+| Logical identity | `NewModel(id, name)` | Creates a non-evaluatable logical Model. |
+| Editable candidate | `Model.Draft` / `Model.NewDraft` | Empty for a new model; independent copy for a committed one. |
+| Edit committed content | `Model.Edit` | Requires a committed model and records its parent version. |
+| Check candidate | `Draft.Validate` | Returns all deterministic `ValidationIssue`s without mutation. |
+| Publish immutable version | `NewCommitOptions`, `Draft.Commit` | Explicit new version ID and decimal precision policy are required. |
+
+Draft additions/replacements/removals follow a regular pattern:
+
+- schema: `Add`, `Replace`, `Remove` for `EntityType`, `RelationType`,
+  `PropertyDefinition`, `PropertyContract`, `Trait`, and `ScopeDefinition`;
+- graph data: `AddEntity`, `ReplaceEntity`, `RemoveEntity`, and equivalent
+  relation methods;
+- bindings: `AddValueBinding`, `SetValueBinding`, `ReplaceValueBinding(key, value)`,
+  `RemoveValueBinding(key)`;
+- declarations: `AddConstraint`/`ReplaceConstraint`/`RemoveConstraint` and
+  `AddRule`/`ReplaceRule`/`RemoveRule`.
+
+Removal never cascades. Assemble temporary dangling references if needed, then
+use validation before committing. Draft list accessors (`Entities`, `Relations`,
+`ValueBindings`, `Constraints`, `Rules`) return deterministic owned values.
+
+Committed `Model` offers read-only deterministic lists and direct lookups:
+`Entities`/`Entity`, `Relations`/`Relation`, `ValueBindings`, `EntityTypes`/
+`EntityType`, `RelationTypes`/`RelationType`, `Traits`/`Trait`,
+`PropertyContracts`/`PropertyContract`, `ScopeDefinitions`/`ScopeDefinition`,
+`PropertyDefinitions`/`PropertyDefinition`, `Constraints`/`Constraint`, and
+`Rules`/`Rule`. `EntityInfo`, `RelationInfo`, `NamedInfo`, `PropertyInfo`, and
+`ScopeDefinitionInfo` provide compact inspection; `Declaration`, `Schema`,
+and `Definition` return the full immutable declaration where relevant.
+
+### Artifacts, scenarios, errors, and zero values
+
+`NewArtifact(model, scenarios...)`, `Encode`, and `Marshal` write canonical
+deterministic `.bcg` JSON. `Decode` and `Unmarshal` read it. `Artifact.Model`,
+`Scenario`, and `Scenarios` provide immutable readback. `FormatVersion` and
+`EngineCompatibility` name the supported portable contract. The current wire
+format intentionally excludes Datasets and Dataset-bound Scenarios.
+
+Check public errors with `errors.Is`/`errors.As`:
+
+- `ErrInvalidArgument` and `ErrInvalidModel` classify bad public calls/wrappers;
+- artifact decoding may return `ErrMalformedArtifact`, `ErrUnsupportedFormat`,
+  `ErrIncompatibleEngine`, `ErrWireSemantic`, `ErrModelValidation`, or
+  `ErrScenarioValidation`;
+- `*ValidationError` retains deterministic `Issues`; `ValidationReport` is
+  the non-error inspection form;
+- `*EngineError.Kind()` exposes a stable operation failure kind.
+
+Most public value wrappers have an intentionally invalid zero value. Prefer
+their constructors, use `IsValid` before retaining optional values, and treat
+the `bool` returned by optional accessors as authoritative. `Draft` and
+`DatasetBuilder` are mutable and not concurrent. Committed `Model`,
+declarations, `Dataset`, `EvaluationSnapshot`, results, explanations, and
+artifact values are immutable. A `Session` is concurrent-safe but remains
+permanently source-bound.
+
+---
+
+<a id="русская-справка"></a>
+
+# Русская справка
+
+## Что такое BCG Engine
+
+BCG Engine — детерминированный Go-движок расчётов для неизменяемых
+бизнес-моделей. Коммит модели создаёт конкретную версию, которую можно
+вычислять, объяснять, анализировать на влияние, проверять ограничениями и
+правилами, кэшировать в `Session` и переносить в каноническом JSON-артефакте
+`.bcg`. Пакет для приложения импортируется так:
+
+```go
+import bcg "github.com/shmatovv/bcg-engine"
+```
+
+Требуется Go 1.22 или новее. Формат `.bcg v1` описан отдельно в
+[`docs/bcg-format-v1.md`](docs/bcg-format-v1.md). README описывает публичный
+Go API, в том числе runtime Dataset; Dataset намеренно не является частью
+wire format.
+
+## Ментальная модель и неизменяемость
+
+```text
+логическая Model
+    │ Draft (изменяемый, может быть невалиден)
+    ▼
+committed ModelVersion (immutable: schema + semantics + optional embedded data)
+    │                         + immutable Dataset (optional external objects/data)
+    ▼
+EvaluationSnapshot
+    ├── Evaluate / EvaluateMany / EvaluateSeries
+    ├── Explain / Impact
+    ├── Constraints / Rules
+    └── Session
+```
+
+`Model` после `Commit`, schema-значения, `Entity`, `Relation`,
+`ValueBinding`, `Scenario`, `Dataset`, `EvaluationSnapshot`, результаты и
+артефакт неизменяемы. `Draft` и `DatasetBuilder` — единственные строительные
+изменяемые объекты; оба не предназначены для одновременной записи из разных
+goroutine. Методы, возвращающие коллекции, возвращают принадлежащие
+вызывающему коды срезов/карт, поэтому их можно изменять без изменения Engine.
+
+Нулевые значения большинства публичных wrapper-типов невалидны. Создавайте
+значения конструкторами, используйте `IsValid`, а для опциональных значений
+всегда учитывайте возвращаемый `bool`.
+
+## Быстрый путь: Model → Draft → Commit → Evaluate
+
+1. Создайте стабильный UUID модели: `NewModel(modelID, name)`.
+2. Вызовите `Draft()` (или `NewDraft()`) и добавьте schema, semantic objects,
+   bindings, constraints и rules.
+3. Выполните `report, err := draft.Validate()`. `err` означает неправильное
+   использование публичной оболочки; `report.OK() == false` означает набор
+   доменных проблем.
+4. Создайте `PrecisionPolicy` через `NewPrecisionPolicy(scale, rounding)` и
+   `CommitOptions` через `NewCommitOptions(versionID, label, policy)`.
+5. `draft.Commit(options)` публикует новую неизменяемую `Model` и не меняет
+   сам Draft. ID версии всегда задаёт вызывающий код; при редактировании
+   committed version новый ID обязан отличаться от parent version ID.
+6. Постройте `PropertyAddress` и `CalculationContext`, затем вызовите
+   `model.Evaluate(address, context)`.
+
+Для редактирования зафиксированной версии используйте `model.Edit()`. Он
+создаёт независимый Draft, сохраняет `ModelID`, а новая версия получает
+`ParentVersionID` исходной. Исходная версия никогда не меняется.
+
+## ID, точные значения, размерности и единицы
+
+| Область | Основной API | Семантика |
+| --- | --- | --- |
+| UUID | `NewID`, `ParseID`, `MustParseID`; `String`, `IsZero`, `Equal` | Все идентичности явные. `MustParseID` подходит только для констант/доверенного ввода. |
+| Тип schema-значения | `BoolType`, `IntegerType`, `DecimalType`, `StringType`, `DateType`, `DateTimeType`, `DurationType` | `ValueType` описывает контракт property, а не конкретное значение. |
+| Время property | `TemporalScalar`, `TemporalSeries` | Scalar и Series — разные режимы schema. |
+| Значения | `Bool`, `Integer`, `Int64`, `DecimalValue`, `String`, `DateValue`, `DateTimeValue`, `DurationValue` | У `Value` есть `Type`, `Kind`, типизированные getters, `Unit`, `WithUnit`, `IsValid`. |
+| Точные литералы | `ParseDecimal`, `ParseDate`, `ParseDateTime`, `ParseDuration`, `MustParseDecimal` | Для decimal и unit scale никогда не используется `float64`. |
+| Размерности | `NewBaseDimension`, `NewDimension`, `DimensionlessDimension` | `DimensionFactor` содержит ID и целый показатель; есть `Factors`, `Equal`, `IsDimensionless`. |
+| Рациональные масштабы | `NewRational`, `RationalFromInt64`, `OneRational` | Числитель и знаменатель строковые, точные и без ограничения `int64`. |
+| Units | `NewUnit`, `NewComposedUnit`, `DimensionlessUnit` | `Dimension`, `Scale`, `Factors`, `ConversionFactors`, `CanConvertTo`, `Equal` читают unit. |
+
+`NewUnit` создаёт простой unit из ID, размерности, символа и точного масштаба.
+`NewComposedUnit` принимает каноническое составное представление.
+Нулевой `Unit` означает «unit отсутствует», а `DimensionlessUnit()` —
+явно заданный безразмерный unit. В BCG нет встроенного каталога валют,
+килограммов или иных предметных единиц: их идентичности задаёт приложение.
+
+## Schema API
+
+Schema описывает классы и вычислительную семантику, а не конкретные runtime
+записи.
+
+| Сущность schema | Конструктор | Ключевые поля/API |
+| --- | --- | --- |
+| Класс entity | `NewEntityType(EntityTypeSpec)` | `ID`, `Name`, `Traits`, `PropertyDefinitions` |
+| Класс relation | `NewRelationType(RelationTypeSpec)` | `ID`, `Name`, optional `From`/`To`, property definitions |
+| Владелец property | `EntityTypeOwner`, `RelationTypeOwner` | `PropertyOwner.Kind`, `ID`, `IsValid` |
+| Property | `NewPropertyDefinition(PropertyDefinitionSpec)` | owner, contract, name, value type, unit, temporal mode, computation |
+| Контракт property | `NewPropertyContract(PropertyContractSpec)` | type, dimension, temporal mode, nullable |
+| Trait | `NewTrait(TraitSpec)` | required property-contract IDs |
+| Scope | `NewScopeDefinition(ScopeDefinitionSpec)` | имя scope и тип его selector value |
+
+`InputComputation()` создаёт input-property, `DerivedComputation(expression)`
+— derived-property. У `PropertyComputation` доступны `Kind` и, для derived,
+`Expression`. Ограничение endpoint relation создают `EntityTypeEndpoint`,
+`TraitEndpoint` или `AnyEntityEndpoint`. Нулевой `EndpointConstraint` означает
+«ограничение не задано», а `AnyEntityEndpoint()` — явное «подходит любой
+Entity»; различайте их через `IsPresent`.
+
+Конструкторы проверяют локальную форму. Существование ссылок, совместимость
+owner/contract, типы выражений, единицы, циклы и прочие межобъектные правила
+проверяются только авторитетным `Draft.Validate`/`Commit`.
+
+Для изменения Draft доступны согласованные методы:
+
+- `Add`/`Replace`/`Remove` для `EntityType`, `RelationType`,
+  `PropertyDefinition`, `PropertyContract`, `Trait`, `ScopeDefinition`;
+- `AddEntity`, `ReplaceEntity`, `RemoveEntity` и соответствующие методы для
+  relation;
+- `AddValueBinding`, `SetValueBinding`, `ReplaceValueBinding(key, value)`,
+  `RemoveValueBinding(key)`;
+- `AddConstraint`, `ReplaceConstraint`, `RemoveConstraint`; `AddRule`,
+  `ReplaceRule`, `RemoveRule`.
+
+Удаление никогда не каскадирует. Можно временно собрать разорванный Draft,
+но до `Commit` все проблемы будут выданы в `ValidationReport`.
+
+Committed `Model` предоставляет детерминированные списки и lookup:
+`Entities`/`Entity`, `Relations`/`Relation`, `ValueBindings`,
+`EntityTypes`/`EntityType`, `RelationTypes`/`Relation`, `Traits`/`Trait`,
+`PropertyContracts`/`PropertyContract`, `ScopeDefinitions`/`ScopeDefinition`,
+`PropertyDefinitions`/`PropertyDefinition`, `Constraints`/`Constraint`,
+`Rules`/`Rule`. Компактные `EntityInfo`, `RelationInfo`, `NamedInfo`,
+`PropertyInfo`, `ScopeDefinitionInfo` содержат часто нужные поля; методы
+`Declaration`, `Schema`, `Definition` возвращают полный immutable объект.
+
+## Выражения, relation traversal и aggregates
+
+`Expression` — непрозрачное неизменяемое typed AST значение. Для него есть
+локальные строители:
+
+| Семейство | Функции |
+| --- | --- |
+| Константы/ссылки | `Constant`, `SelfProperty`, `AbsoluteProperty`, `BoundProperty`, `BoundContractProperty` |
+| Арифметика | `Add`, `Subtract`, `Multiply`, `Divide`, `Negate` |
+| Сравнение | `Equal`, `NotEqual`, `Less`, `LessOrEqual`, `Greater`, `GreaterOrEqual` |
+| Логика | `And`, `Or`, `Not`, `If`, `IsNull`, `Coalesce` |
+| Источник traversal | `SelfTraversal`, `AbsoluteEntityTraversal`, `BoundEntityTraversal` |
+| Aggregate | `Count`, `FilteredCount`, `Aggregate`, `FilteredAggregate` |
+
+`TraversalDirection` принимает `TraverseOutgoing`, `TraverseIncoming` или
+`TraverseBoth`. `TraversalSource` хранит origin (`SelfTraversalOrigin`,
+`AbsoluteEntityTraversalOrigin`, `BoundEntityTraversalOrigin`), направление и
+`RelationTypeID`. В aggregate map/filter-выражениях доступны lexical bindings
+`BoundEntity` и `BoundRelation`. Операции aggregate: `AggregateSum`,
+`AggregateAverage`, `AggregateMin`, `AggregateMax`; у `Count` map отсутствует
+намеренно. Проверка типов, ссылок, map/filter и глубины выполняется при
+валидации модели, а не только конструктором.
+
+## Entity, Relation, Bindings и SourceSeries
+
+`NewEntity(EntitySpec)` создаёт concrete entity с `ID`, `TypeID` и optional
+name. Его property values живут отдельно. `NewRelation(RelationSpec)` создаёт
+направленное ребро `From → To` c relation type и optional Boolean
+`Applicability`.
+
+`ValueBinding` — постоянный base candidate. Его target формируется
+`ObjectPropertyBindingTarget(address)` для конкретного Entity/Relation или
+`TypePropertyBindingTarget(owner, definitionID)` для default на типе. Value:
+
+- `DefinedBindingValue(value)` — scalar value;
+- `NullBindingValue()` — явно известное отсутствие, а не `Undefined`;
+- `SeriesBindingValue(sourceSeries)` — immutable input series.
+
+`NewValueBinding(ValueBindingSpec)` принимает target, value, selectors и
+optional `*EffectivePeriod`. `NewEffectivePeriod(from, to)` задаёт
+полуоткрытый интервал `[from,to)` с optional границами. `nil` period в spec
+значит отсутствие time selector. `ValueBinding` не имеет UUID: его identity —
+`ValueBindingKey` из target + канонических scopes + period; применяйте его в
+`ReplaceValueBinding` и `RemoveValueBinding`.
+
+Для series используйте `DefinedSourceSample` или `NullSourceSample`, затем
+`NewSourcePoint` / `NewSourceInterval`, затем `NewPointSourceSeries` /
+`NewIntervalSourceSeries`. Point должны строго возрастать; интервалы — быть
+отсортированы, не пересекаться и быть `[from,to)`, смежные интервалы допустимы.
+`SourceSeries` — authored immutable input; `SeriesResult` — отдельный runtime
+output API.
+
+## CalculationContext, результат и precedence
+
+Постройте `PropertyAddress` через `EntityProperty(entityID, definitionID)`
+или `RelationProperty(relationID, definitionID)`. Затем создайте контекст:
+
+- `NewCalculationContextAt(at)` для scalar time point;
+- `NewCalculationContextPeriod(from, to)` для запрошенного interval;
+- `WithScopes(NewScopeSelector(scopeID, value), ...)`;
+- `WithScenario(scenario)`, `WithoutScenario()`;
+- `WithCalculationOverrides(NewOverride(...), NullOverride(...))`.
+
+Контекст и все его производные неизменяемы. Calculation override — только
+временная value-подмена: она не меняет model/dataset и не сериализуется.
+Эффективный выбор значения у concrete property строго таков:
+
+```text
+CalculationOverride > ScenarioOverride > ObjectBinding > TypeBinding > Undefined
+```
+
+Dataset binding — это обычный `ObjectBinding`, нового уровня precedence нет.
+`Result.State()` возвращает `Defined`, `Null` или `Undefined`. Для первого
+используйте `Value()`, для последнего — `Undefined()` и его `UndefinedKind`
+(`MissingValue`, `AmbiguousValue`, `DependencyUndefined`,
+`EmptyAggregation`, `IndeterminateCondition`, `InvalidOperation`,
+`ExternalUnavailable`, `DivisionByZero`). `Null` и `Undefined`
+— нормальные бизнес-результаты, а не Go errors.
+
+`Evaluate`, `EvaluateMany`, `EvaluateSeries`, `Explain`, `ExplainSeries`,
+`AnalyzeImpact`, constraint/rule методы доступны у `Model`. Такие же методы
+stateless evaluation доступны у `EvaluationSnapshot`; у `Session` context
+уже сохранён и не передаётся в каждый вызов.
+
+`SeriesResult` имеет `PointSeries` либо `IntervalSeries`. `Points()` и
+`Intervals()` возвращают sample с отдельным scalar `Result`; весь series может
+стать Undefined, что проверяется через `IsUndefined`/`Undefined`.
+
+## Explain, Impact, Constraints, Rules
+
+`Explain`/`ExplainSeries` возвращают фактический trace исполнения. Начните с
+`Explanation.Root()`, обходите упорядоченные `ExplanationNode.Children()`.
+Узел при наличии соответствующих данных даёт property, operation, decision,
+state/value/undefined reason, calculation override target, Scenario ID и
+aggregate item (`relationID`, `relatedEntityID`). Trace не реконструируется из
+AST, поэтому повторные occurrence сохраняются.
+
+`AnalyzeImpact(mode, source, context)` возвращает детерминированный
+`ImpactResult`: exact `ModelVersionID`, optional `DatasetID`, source,
+`Affected()` с minimum depth и прямые `Edges()`. Режимы:
+
+- `StructuralImpact` — все структурно возможные зависимости;
+- `EffectiveImpact` — после применения context/scopes/time/scenario/overrides;
+- `ObservedImpact` — зависимости, реально увиденные вычислением.
+
+Ограничения принадлежат модели. `CheckConstraint`, `CheckConstraints`,
+`CheckFeasibility` работают также через snapshot/session, поэтому expression
+может читать Dataset объекты по существующему языку. States Constraint:
+`Satisfied`, `Violated`, `NotApplicable`, `Undefined`; только `SeverityHard`
+участвует в `FeasibilityResult` (`Feasible`, `Infeasible`, `Undetermined`).
+
+Rules — именованные чистые Boolean decisions без actions/effects. Методы
+`EvaluateRule` и `EvaluateRules` дают `RuleResult`/`RuleReport` со states
+`RuleActive`, `RuleInactive`, `RuleUndefined`; convenience methods `Active`,
+`Inactive`, `Undefined` фильтруют report без повторного вычисления.
+
+## External runtime Dataset
+
+Dataset нужен, когда schema/formulas/constraints остаются в committed
+`Model`, а concrete operational objects и object-level values живут отдельно.
+Изменение data создаёт новый Dataset, а не ModelVersion:
+
+```text
+ModelVersion + Dataset = immutable EvaluationSnapshot
+```
+
+Dataset содержит только `Entity`, `Relation` и **object-level**
+`ValueBinding`; он не содержит schema, traits, property definitions/contracts,
+scope definitions, constraints, rules, type-level bindings, scenarios или
+calculation context. Model embedded data остаются valid static data.
+
+### Создание Dataset
+
+```go
+builder, err := bcg.NewDatasetBuilder(model, datasetID)
+if err != nil { return err }
+
+order, err := bcg.NewEntity(bcg.EntitySpec{ID: orderID, TypeID: orderTypeID})
+if err != nil { return err }
+if err := builder.AddEntity(order); err != nil { return err }
+
+quantityAddress, err := bcg.EntityProperty(orderID, quantityDefinitionID)
+if err != nil { return err }
+target, err := bcg.ObjectPropertyBindingTarget(quantityAddress)
+if err != nil { return err }
+value, err := bcg.DefinedBindingValue(
+	bcg.DecimalValue(bcg.MustParseDecimal("10")),
+)
+if err != nil { return err }
+binding, err := bcg.NewValueBinding(bcg.ValueBindingSpec{Target: target, Value: value})
+if err != nil { return err }
+if err := builder.AddValueBinding(binding); err != nil { return err }
+
+report, err := builder.Validate()
+if err != nil { return err }
+if !report.OK() { return fmt.Errorf("dataset invalid: %#v", report.Issues()) }
+dataset, err := builder.Build()
+if err != nil { return err }
+
+snapshot, err := model.WithDataset(dataset)
+if err != nil { return err }
+totalAddress, err := bcg.EntityProperty(orderID, totalDefinitionID)
+if err != nil { return err }
+result, err := snapshot.Evaluate(totalAddress, calculation)
+```
+
+`DatasetBuilder` не thread-safe и после успешного `Build` sealed. `Dataset`
+неизменяем и безопасен для concurrent reads. `Entities`, `Relations`,
+`ValueBindings` возвращают deterministic defensive copies; `Entity(id)` и
+`Relation(id)` — indexed lookup. У Dataset есть `ID`, `ModelVersionID`,
+`IsValid`.
+
+`DatasetID` задаёт приложение. У движка нет глобального registry, поэтому
+**нельзя повторно использовать один DatasetID для другого содержимого**. Он
+должен быть exact snapshot identity.
+
+### Dataset validation и graph
+
+Builder переиспользует `ValidationReport`/`ValidationIssue` и отклоняет:
+
+- duplicate Dataset IDs и collisions с embedded Model Entity/Relation;
+- unknown EntityType/RelationType, missing endpoint, несовместимый endpoint
+  entity type/trait;
+- type-level binding, binding на embedded object, unknown/wrong property,
+  base binding derived-property;
+- scalar/series, value type, unit, nullable, scope, effective-period,
+  selector mismatch, ambiguous/conflicting object candidates;
+- Dataset relation с двумя embedded endpoints.
+
+Разрешены отношения Dataset→Dataset, Dataset→embedded и embedded→Dataset.
+Они участвуют в forward/reverse/`TraverseBoth`, aggregate filter/map, Explain,
+Impact, constraints и rules. Relation-owned binding разрешён, если relation
+принадлежит Dataset. Dataset не может override property embedded model object:
+для временной альтернативы используйте Scenario или CalculationOverride.
+
+Dataset вместе с embedded data образует **полный** semantic graph. Отсутствие
+relation означает, что relation нет; это не «данные ещё не подгружены».
+Отсутствие object binding даёт обычный fallback type binding либо Undefined.
+Никакой lazy loading, network, DB callback в движке не существует.
+
+### EvaluationSnapshot, identity, Session и Scenario
+
+`Model.WithDataset(dataset)` требует равенство
+`dataset.ModelVersionID() == model.VersionID()`, строит combined dependency
+graph один раз и отвергает cycle, добавленный runtime topology. Model/Dataset
+целиком не копируются. `EvaluationSnapshot` имеет `Model`, `Dataset`,
+`ModelVersionID`, `DatasetID`, `IsValid`, а также полный stateless API:
+`Evaluate`, `EvaluateMany`, `EvaluateSeries`, `Explain`, `ExplainSeries`,
+`AnalyzeImpact`, `CheckConstraint(s)`, `CheckFeasibility`, `EvaluateRule(s)`,
+`NewSession`, `NewScenario`.
+
+Не вызывайте `snapshot.Model().Evaluate(...)`, если хотите external data: это
+осознанно model-only вычисление. Вызывайте `snapshot.Evaluate(...)`.
+
+Внутренняя source identity:
+
+```text
+только model:       ModelVersionID
+model + dataset:    ModelVersionID + DatasetID
+```
+
+Поэтому plan/session/observed impact от Dataset A никогда не переиспользуется
+для Dataset B, даже при одинаковом ModelVersion и совпавших object IDs.
+Новый Dataset означает новый snapshot и новую Session; API замены Dataset в
+Session специально отсутствует.
+
+`Model.NewSession(context)` создаёт model-only Session;
+`snapshot.NewSession(context)` — Session с фиксированным Dataset. `Session`
+безопасна для concurrent use. `SetCalculationContext` меняет context,
+`SetCalculationOverrides` — только override layer, `Reset` чистит generation,
+`CacheStats` возвращает Hits/Misses/Invalidations/Entries.
+
+`NewScenario(model, spec)` создаёт portable model-only Scenario. Если override
+нацелен на Dataset object, используйте `snapshot.NewScenario(spec)`. Scenario
+только с model-owned targets остаётся portable даже при создании через
+snapshot; mixed scenario становится Dataset-bound. `BaseDatasetID()` вернёт ID
+только у последнего. Dataset-bound Scenario применяется лишь к exact Dataset,
+не сериализуется и будет отклонён `NewArtifact`. `.bcg` остаётся portable
+self-contained Model + model-only Scenario.
+
+## Serialization, ошибки и API compatibility
+
+`NewArtifact(model, scenarios...)`, `Encode`, `Marshal` пишут canonical
+deterministic `.bcg`; `Decode`, `Unmarshal` читают его. `Artifact` даёт
+`Model`, lookup `Scenario`, отсортированный `Scenarios`, `ModelName`,
+`IsValid`. `FormatVersion` и `EngineCompatibility` показывают версию
+wire/semantic contract. Dataset и Dataset-bound Scenario сознательно не
+сериализуются.
+
+Проверяйте ошибки через `errors.Is`/`errors.As`:
+
+- `ErrInvalidArgument`, `ErrInvalidModel` — ошибка публичного вызова/wrapper;
+- при codec: `ErrMalformedArtifact`, `ErrUnsupportedFormat`,
+  `ErrIncompatibleEngine`, `ErrWireSemantic`, `ErrModelValidation`,
+  `ErrScenarioValidation`;
+- `*ValidationError` содержит deterministic `Issues`; до Build/Commit
+  используйте `ValidationReport` (`OK`, `Len`, `Issues`);
+- `*EngineError.Kind()` даёт стабильную категорию runtime failure.
+
+Существующий model-only API сохраняется: `Draft`, `Commit`, `Edit`,
+serialization, `Evaluate`, `EvaluateMany`, `EvaluateSeries`, `Explain`,
+`Impact`, `Scenario`, `Session`, constraints и rules работают без Dataset
+точно как раньше. Runtime Dataset — additive capability, не новая версия
+модели и не новый `.bcg` format.
+
+## Полная краткая карта публичного API
+
+| Группа | Типы/функции |
+| --- | --- |
+| Lifecycle | `Model`, `Draft`, `CommitOptions`, `PrecisionPolicy`, `RoundingMode`, `NewModel`, `NewCommitOptions`, `NewPrecisionPolicy` |
+| Schema | `EntityType`, `RelationType`, `PropertyDefinition`, `PropertyContract`, `Trait`, `ScopeDefinition`, `PropertyOwner`, `EndpointConstraint`, `PropertyComputation` и все их `Spec`/constructors |
+| Expressions | `Expression`, references, arithmetic, comparison, boolean, traversal и aggregate builders |
+| Semantic graph | `Entity`, `Relation`, `EntitySpec`, `RelationSpec`, model/draft list+lookup API |
+| Data | `ValueBinding`, `ValueBindingSpec`, `BindingTarget`, `BindingValue`, `ValueBindingKey`, `EffectivePeriod`, `SourceSeries`, samples/points/intervals |
+| Runtime | `CalculationContext`, `ScopeSelector`, `Override`, `PropertyAddress`, `Result`, `SeriesResult`, `Explanation`, `ImpactResult`, `Session` |
+| External runtime data | `Dataset`, `DatasetBuilder`, `NewDatasetBuilder`, `Model.WithDataset`, `EvaluationSnapshot` |
+| Governance | `Constraint`, `Rule`, Scenario types, reports/results, feasibility API |
+| Portable data | `Artifact`, `NewArtifact`, `Encode`, `Decode`, `Marshal`, `Unmarshal` |
+| Diagnostics | validation types, sentinels `Err...`, `EngineError`, `CacheStats` |
+
+Для точных типов параметров и всех accessor-методов используйте GoDoc вашего
+редактора или `go doc github.com/shmatovv/bcg-engine`; все exported declarations
+также перечислены в англоязычном разделе **Public API reference** выше.

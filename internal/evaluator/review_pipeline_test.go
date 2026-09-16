@@ -109,6 +109,45 @@ func TestLazyPlanAndProvenance(t *testing.T) {
 	wg.Wait()
 }
 
+func TestEvaluatePlanRejectsPlanForAnotherDataset(t *testing.T) {
+	f := newPipelineFixture()
+	prototype := f.property(value.Integer, schema.InputComputation(), false)
+	v := f.commit(t)
+	runtimeEntityID := identity.New()
+	target := address.NewPropertyAddress(address.EntityRef(runtimeEntityID), prototype.DefinitionID())
+
+	buildSource := func() model.EvaluationSource {
+		builder, err := model.NewDatasetBuilder(v, identity.New())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := builder.AddEntity(semantic.NewEntity(runtimeEntityID, f.typeID, "", false)); err != nil {
+			t.Fatal(err)
+		}
+		dataset, err := builder.Build()
+		if err != nil {
+			t.Fatal(err)
+		}
+		source, err := model.NewEvaluationSource(v, dataset)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return source
+	}
+
+	first, second := buildSource(), buildSource()
+	p, err := plan.Build(first, []address.PropertyAddress{target}, reviewContext())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result, err := evaluator.EvaluatePlan(first, p); err != nil || !result.SourceIdentity().Equal(first.SourceIdentity()) {
+		t.Fatalf("Dataset A PlanResult = %#v, %v", result, err)
+	}
+	if _, err := evaluator.EvaluatePlan(second, p); err == nil {
+		t.Fatal("Plan for Dataset A unexpectedly evaluated against Dataset B")
+	}
+}
+
 func provenanceContains(n provenance.Node, target address.PropertyAddress) bool {
 	if p, ok := n.Property(); ok && p == target {
 		return true

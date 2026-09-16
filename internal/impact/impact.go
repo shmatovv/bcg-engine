@@ -18,6 +18,13 @@ import (
 // values, so Scope, effective time, Null and Undefined do not alter the
 // result. Source itself is deliberately excluded.
 func AnalyzeStructural(version model.ModelVersion, source address.PropertyAddress) (Result, error) {
+	return AnalyzeStructuralSource(version, source)
+}
+
+// AnalyzeStructuralSource is the combined-source variant used by immutable
+// runtime snapshots. The long-standing AnalyzeStructural API remains
+// ModelVersion-only for compatibility with existing internal consumers.
+func AnalyzeStructuralSource(version evaluator.Source, source address.PropertyAddress) (Result, error) {
 	graph, err := baseGraph(version, source)
 	if err != nil {
 		return Result{}, err
@@ -33,11 +40,15 @@ func AnalyzeStructural(version model.ModelVersion, source address.PropertyAddres
 // mode; use AnalyzeObserved to inspect what the ordinary evaluator actually
 // executed.
 func AnalyzeEffective(version model.ModelVersion, source address.PropertyAddress, context runtime.CalculationContext) (Result, error) {
+	return AnalyzeEffectiveSource(version, source, context)
+}
+
+func AnalyzeEffectiveSource(version evaluator.Source, source address.PropertyAddress, context runtime.CalculationContext) (Result, error) {
 	graph, err := baseGraph(version, source)
 	if err != nil {
 		return Result{}, err
 	}
-	effective, err := plan.Build(version, graph.Vertices(), context)
+	effective, err := plan.BuildWithDependencyGraph(version, graph, graph.Vertices(), context)
 	if err != nil {
 		return Result{}, newError(ErrorEffectivePlanBuild, "failed to build complete Effective Evaluation Plan", err)
 	}
@@ -58,12 +69,20 @@ func AnalyzeEffective(version model.ModelVersion, source address.PropertyAddress
 // appear. For Series this is a property-level union of independently recorded
 // sample paths; no sample is matched to another by array position.
 func AnalyzeObserved(version model.ModelVersion, source address.PropertyAddress, context runtime.CalculationContext) (Result, error) {
+	return AnalyzeObservedSource(version, source, context)
+}
+
+func AnalyzeObservedSource(version evaluator.Source, source address.PropertyAddress, context runtime.CalculationContext) (Result, error) {
 	return analyzeObserved(
 		version,
 		source,
 		context,
 		func(targets []address.PropertyAddress) ([]evaluator.Result, error) {
-			observedPlan, err := plan.Build(version, targets, context)
+			graph, graphErr := baseGraph(version, source)
+			if graphErr != nil {
+				return nil, graphErr
+			}
+			observedPlan, err := plan.BuildWithDependencyGraph(version, graph, targets, context)
 			if err != nil {
 				return nil, newError(ErrorEffectivePlanBuild, "failed to build observed scalar evaluation plan", err)
 			}
@@ -91,7 +110,7 @@ func AnalyzeObservedWithSession(session *evaluator.Session, source address.Prope
 	if session == nil {
 		return Result{}, newError(ErrorInvalidModelVersion, "evaluation Session is nil", nil)
 	}
-	version := session.ModelVersion()
+	version := session.Source()
 	return analyzeObserved(
 		version,
 		source,
@@ -107,12 +126,12 @@ func AnalyzeObservedWithSession(session *evaluator.Session, source address.Prope
 }
 
 func analyzeObserved(
-	version model.ModelVersion,
+	version evaluator.Source,
 	source address.PropertyAddress,
 	context runtime.CalculationContext,
 	evaluateScalars func([]address.PropertyAddress) ([]evaluator.Result, error),
 ) (Result, error) {
-	effective, err := AnalyzeEffective(version, source, context)
+	effective, err := AnalyzeEffectiveSource(version, source, context)
 	if err != nil {
 		return Result{}, err
 	}
@@ -168,14 +187,20 @@ func analyzeObserved(
 	}), nil
 }
 
-func baseGraph(version model.ModelVersion, source address.PropertyAddress) (dependency.Graph, error) {
+func baseGraph(version evaluator.Source, source address.PropertyAddress) (dependency.Graph, error) {
 	if !version.IsCommitted() {
 		return dependency.Graph{}, newError(ErrorInvalidModelVersion, "Impact requires a committed ModelVersion", nil)
 	}
 	if !source.IsValid() {
 		return dependency.Graph{}, newError(ErrorInvalidSource, "Impact source property address is invalid", nil)
 	}
-	graph, err := dependency.Build(version)
+	var graph dependency.Graph
+	var err error
+	if cached, ok := version.(interface{ DependencyGraph() dependency.Graph }); ok {
+		graph = cached.DependencyGraph()
+	} else {
+		graph, err = dependency.Build(version)
+	}
 	if err != nil {
 		return dependency.Graph{}, newError(ErrorDependencyGraphBuild, "failed to build value dependency graph", err)
 	}
@@ -185,7 +210,7 @@ func baseGraph(version model.ModelVersion, source address.PropertyAddress) (depe
 	return graph, nil
 }
 
-func traverse(version model.ModelVersion, source address.PropertyAddress, mode Mode, dependents func(address.PropertyAddress) []address.PropertyAddress) Result {
+func traverse(version evaluator.Source, source address.PropertyAddress, mode Mode, dependents func(address.PropertyAddress) []address.PropertyAddress) Result {
 	depths := map[address.PropertyAddress]int{source: 0}
 	edges := make(map[edgeKey]struct{})
 	queue := []address.PropertyAddress{source}
@@ -201,7 +226,7 @@ func traverse(version model.ModelVersion, source address.PropertyAddress, mode M
 			queue = append(queue, dependent)
 		}
 	}
-	return newResult(version.ID(), source, mode, depths, edges)
+	return newResult(version.SourceIdentity(), source, mode, depths, edges)
 }
 
 func collectSeriesEdges(explanation evaluator.SeriesExplanation, edges map[edgeKey]struct{}) {
