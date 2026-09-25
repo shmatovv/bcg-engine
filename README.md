@@ -164,6 +164,21 @@ a canonical semantic projection; it excludes version ID, parent version ID,
 version label, and diagnostic names, while including schema, ASTs, units,
 keys, cardinality, declarations, bindings, and function requirements.
 
+## Runtime Dataset validation, patches, and rebase
+
+`model.NewRuntimeValidator()` performs local structural validation of entity,
+relation, and binding candidates. It deliberately cannot establish global
+uniqueness, cardinality, or contextual invariant truth. A Dataset is the
+complete evaluation world presented to the Engine; `snapshot.CheckStructuralIntegrity()` checks required base bindings, keys, and relation cardinality, while `snapshot.CheckIntegrity(context)` additionally evaluates invariants. Integrity findings are business results, not construction errors.
+
+`DatasetPatchBuilder` produces an immutable patch bound to a base Dataset ID.
+`dataset.Apply(model, newDatasetID, patch)` atomically creates a new Dataset;
+the prior Dataset is never changed and remove operations do not cascade.
+`dataset.Rebase(oldModel, newModel, newDatasetID)` validates the unchanged
+concrete runtime content under a compatible logical model and creates a newly
+bound Dataset only when its structural representation remains valid. Rebase is
+not migration: it neither coerces values nor invents, removes, or rewrites data.
+
 ## Authoring primitives
 
 `ValueType` is schema metadata (`bcg.DecimalType`, `bcg.BoolType`, and the
