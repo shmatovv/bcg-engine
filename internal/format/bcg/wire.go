@@ -20,22 +20,76 @@ type wireModel struct {
 }
 
 type wireVersion struct {
-	ID              string             `json:"id"`
-	ModelID         string             `json:"modelId"`
-	ParentVersionID *string            `json:"parentVersionId"`
-	Label           string             `json:"label"`
-	Precision       wirePrecision      `json:"precision"`
-	EntityTypes     []wireEntityType   `json:"entityTypes"`
-	RelationTypes   []wireRelationType `json:"relationTypes"`
-	Traits          []wireTrait        `json:"traits"`
-	Contracts       []wireContract     `json:"propertyContracts"`
-	Properties      []wireProperty     `json:"propertyDefinitions"`
-	Scopes          []wireScope        `json:"scopeDefinitions"`
-	Entities        []wireEntity       `json:"entities"`
-	Relations       []wireRelation     `json:"relations"`
-	Bindings        []wireBinding      `json:"valueBindings"`
-	Constraints     []wireConstraint   `json:"constraints"`
-	Rules           []wireRule         `json:"rules"`
+	ID                   string                    `json:"id"`
+	ModelID              string                    `json:"modelId"`
+	ParentVersionID      *string                   `json:"parentVersionId"`
+	Label                string                    `json:"label"`
+	Precision            wirePrecision             `json:"precision"`
+	EntityTypes          []wireEntityType          `json:"entityTypes"`
+	EnumDefinitions      []wireEnumDefinition      `json:"enumDefinitions,omitempty"`
+	EntityKeys           []wireEntityKey           `json:"entityKeyDefinitions,omitempty"`
+	RelationTypes        []wireRelationType        `json:"relationTypes"`
+	Traits               []wireTrait               `json:"traits"`
+	Contracts            []wireContract            `json:"propertyContracts"`
+	Properties           []wireProperty            `json:"propertyDefinitions"`
+	Scopes               []wireScope               `json:"scopeDefinitions"`
+	Entities             []wireEntity              `json:"entities"`
+	Relations            []wireRelation            `json:"relations"`
+	Bindings             []wireBinding             `json:"valueBindings"`
+	Constraints          []wireConstraint          `json:"constraints"`
+	Rules                []wireRule                `json:"rules"`
+	Invariants           []wireInvariant           `json:"invariants,omitempty"`
+	FunctionRequirements []wireFunctionRequirement `json:"functionRequirements,omitempty"`
+}
+type wireEnumOption struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+type wireEnumDefinition struct {
+	ID      string           `json:"id"`
+	Name    string           `json:"name"`
+	Options []wireEnumOption `json:"options"`
+}
+type wireEntityKey struct {
+	ID                    string   `json:"id"`
+	Name                  string   `json:"name"`
+	EntityTypeID          string   `json:"entityTypeId"`
+	PropertyDefinitionIDs []string `json:"propertyDefinitionIds"`
+}
+type wireCardinality struct {
+	Min string  `json:"min"`
+	Max *string `json:"max"`
+}
+type wireInvariantSubject struct {
+	Kind   string `json:"kind"`
+	TypeID string `json:"typeId"`
+}
+type wireInvariant struct {
+	ID            string               `json:"id"`
+	Name          string               `json:"name"`
+	Subject       wireInvariantSubject `json:"subject"`
+	Applicability *wireExpression      `json:"applicability"`
+	Assertion     wireExpression       `json:"assertion"`
+}
+type wireFunctionRef struct {
+	Namespace string `json:"namespace"`
+	Name      string `json:"name"`
+	Major     uint32 `json:"major"`
+	Minor     uint32 `json:"minor"`
+	Patch     uint32 `json:"patch"`
+}
+type wireFunctionType struct {
+	ValueType        string    `json:"valueType"`
+	EnumDefinitionID *string   `json:"enumDefinitionId"`
+	Unit             *wireUnit `json:"unit"`
+	TemporalMode     string    `json:"temporalMode"`
+	Nullable         bool      `json:"nullable"`
+}
+type wireFunctionRequirement struct {
+	Ref            wireFunctionRef    `json:"ref"`
+	Parameters     []wireFunctionType `json:"parameters"`
+	Result         wireFunctionType   `json:"result"`
+	NullableResult bool               `json:"nullableResult"`
 }
 
 type wirePrecision struct {
@@ -61,6 +115,8 @@ type wireRelationType struct {
 	From                *wireTypeConstraint `json:"from"`
 	To                  *wireTypeConstraint `json:"to"`
 	PropertyDefinitions []string            `json:"propertyDefinitions"`
+	OutgoingCardinality *wireCardinality    `json:"outgoingCardinality,omitempty"`
+	IncomingCardinality *wireCardinality    `json:"incomingCardinality,omitempty"`
 }
 
 type wireTrait struct {
@@ -101,28 +157,31 @@ type wireOwner struct {
 }
 
 type wireContract struct {
-	ID           string         `json:"id"`
-	Name         string         `json:"name"`
-	ValueType    string         `json:"valueType"`
-	Dimension    *wireDimension `json:"dimension"`
-	TemporalMode string         `json:"temporalMode"`
-	Nullable     *bool          `json:"nullable"`
+	ID               string         `json:"id"`
+	Name             string         `json:"name"`
+	ValueType        string         `json:"valueType"`
+	Dimension        *wireDimension `json:"dimension"`
+	TemporalMode     string         `json:"temporalMode"`
+	Nullable         *bool          `json:"nullable"`
+	EnumDefinitionID *string        `json:"enumDefinitionId,omitempty"`
 }
 
 type wireProperty struct {
-	ID           string          `json:"id"`
-	Owner        wireOwner       `json:"owner"`
-	ContractID   *string         `json:"contractId"`
-	Name         string          `json:"name"`
-	ValueType    string          `json:"valueType"`
-	Unit         *wireUnit       `json:"unit"`
-	TemporalMode string          `json:"temporalMode"`
-	Computation  wireComputation `json:"computation"`
+	ID               string          `json:"id"`
+	Owner            wireOwner       `json:"owner"`
+	ContractID       *string         `json:"contractId"`
+	Name             string          `json:"name"`
+	ValueType        string          `json:"valueType"`
+	Unit             *wireUnit       `json:"unit"`
+	TemporalMode     string          `json:"temporalMode"`
+	Computation      wireComputation `json:"computation"`
+	EnumDefinitionID *string         `json:"enumDefinitionId,omitempty"`
 }
 
 type wireComputation struct {
 	Kind       string          `json:"kind"`
 	Expression *wireExpression `json:"expression"`
+	Presence   string          `json:"presence,omitempty"`
 }
 
 type wireScope struct {
@@ -197,8 +256,10 @@ type wireSeriesSample struct {
 }
 
 type wireRaw struct {
-	Type string `json:"type"`
-	Data string `json:"data"`
+	Type             string `json:"type"`
+	Data             string `json:"data"`
+	EnumDefinitionID string `json:"enumDefinitionId,omitempty"`
+	EnumOptionID     string `json:"enumOptionId,omitempty"`
 }
 
 type wirePoint struct {
@@ -290,4 +351,7 @@ type wireExpression struct {
 	Filter    *wireExpression      `json:"filter,omitempty"`
 	Map       *wireExpression      `json:"map,omitempty"`
 	Operation string               `json:"operation,omitempty"`
+	Operands  []wireExpression     `json:"operands,omitempty"`
+	Arguments []wireExpression     `json:"arguments,omitempty"`
+	Function  *wireFunctionRef     `json:"function,omitempty"`
 }

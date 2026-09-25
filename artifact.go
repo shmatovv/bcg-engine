@@ -28,9 +28,6 @@ func NewArtifact(model Model, scenarios ...Scenario) (Artifact, error) {
 	if !model.IsValid() {
 		return Artifact{}, fmt.Errorf("%w: committed model is required", ErrInvalidArgument)
 	}
-	if modelHasV2OnlySemantics(model) {
-		return Artifact{}, fmt.Errorf("%w: .bcg v1 cannot encode Schema v2 declarations", ErrWireSemantic)
-	}
 	values := make([]scenario.Scenario, len(scenarios))
 	for index, candidate := range scenarios {
 		if _, bound := candidate.value.BaseDatasetID(); bound {

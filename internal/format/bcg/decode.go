@@ -14,6 +14,7 @@ import (
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/address"
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/constraint"
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/identity"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/invariant"
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/rule"
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/scenario"
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/schema"
@@ -21,6 +22,8 @@ import (
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/semantic"
 	domaintime "github.com/shmatovv/bcg-engine/v2/internal/domain/time"
 	"github.com/shmatovv/bcg-engine/v2/internal/expression/ast"
+	"github.com/shmatovv/bcg-engine/v2/internal/expression/typing"
+	"github.com/shmatovv/bcg-engine/v2/internal/function"
 	"github.com/shmatovv/bcg-engine/v2/internal/model"
 	modelscenario "github.com/shmatovv/bcg-engine/v2/internal/scenario"
 	"github.com/shmatovv/bcg-engine/v2/internal/types/date"
@@ -101,14 +104,18 @@ func checkEnvelope(data []byte) error {
 	if envelope.FormatVersion == nil {
 		return wireError("formatVersion", "is required")
 	}
-	if *envelope.FormatVersion != FormatVersion {
+	if *envelope.FormatVersion != 1 && *envelope.FormatVersion != FormatVersion {
 		return fmt.Errorf("%w: got %d, supported %d", ErrUnsupportedFormatVersion, *envelope.FormatVersion, FormatVersion)
 	}
 	if envelope.EngineCompatibility == nil {
 		return wireError("engineCompatibility", "is required")
 	}
-	if *envelope.EngineCompatibility != EngineCompatibilityV1 {
-		return fmt.Errorf("%w: got %q, supported %q", ErrUnsupportedEngineCompatibility, *envelope.EngineCompatibility, EngineCompatibilityV1)
+	expected := EngineCompatibilityV2
+	if *envelope.FormatVersion == 1 {
+		expected = EngineCompatibilityV1
+	}
+	if *envelope.EngineCompatibility != expected {
+		return fmt.Errorf("%w: got %q, supported %q", ErrUnsupportedEngineCompatibility, *envelope.EngineCompatibility, expected)
 	}
 	return nil
 }
@@ -206,11 +213,15 @@ func pathOrDocument(path string) string {
 }
 
 func requireDocumentEnvelope(document wireDocument) error {
-	if document.FormatVersion != FormatVersion {
+	if document.FormatVersion != 1 && document.FormatVersion != FormatVersion {
 		return fmt.Errorf("%w: got %d, supported %d", ErrUnsupportedFormatVersion, document.FormatVersion, FormatVersion)
 	}
-	if document.EngineCompatibility != EngineCompatibilityV1 {
-		return fmt.Errorf("%w: got %q, supported %q", ErrUnsupportedEngineCompatibility, document.EngineCompatibility, EngineCompatibilityV1)
+	expected := EngineCompatibilityV2
+	if document.FormatVersion == 1 {
+		expected = EngineCompatibilityV1
+	}
+	if document.EngineCompatibility != expected {
+		return fmt.Errorf("%w: got %q, supported %q", ErrUnsupportedEngineCompatibility, document.EngineCompatibility, expected)
 	}
 	return nil
 }
@@ -303,6 +314,18 @@ func (document wireDocument) toArtifact() (artifact Artifact, err error) {
 	if err := requireDocumentEnvelope(document); err != nil {
 		return Artifact{}, err
 	}
+	if document.FormatVersion == FormatVersion {
+		for i, r := range document.Artifact.Version.RelationTypes {
+			if r.OutgoingCardinality == nil || r.IncomingCardinality == nil {
+				return Artifact{}, wireError(fmt.Sprintf("artifact.version.relationTypes[%d]", i), "v2 cardinalities are required")
+			}
+		}
+		for i, p := range document.Artifact.Version.Properties {
+			if p.Computation.Kind == "input" && p.Computation.Presence == "" {
+				return Artifact{}, wireError(fmt.Sprintf("artifact.version.propertyDefinitions[%d].computation.presence", i), "is required in v2")
+			}
+		}
+	}
 	modelID, err := parseUUID(document.Artifact.Model.ID, "artifact.model.id")
 	if err != nil {
 		return Artifact{}, err
@@ -353,6 +376,13 @@ func (item wireVersion) toModelVersion(modelID identity.UUID, modelName string) 
 		}
 		draft.AddEntityType(value)
 	}
+	for index, encoded := range item.EnumDefinitions {
+		value, err := encoded.toDomain(fmt.Sprintf("artifact.version.enumDefinitions[%d]", index))
+		if err != nil {
+			return model.ModelVersion{}, err
+		}
+		draft.AddEnumDefinition(value)
+	}
 	for index, encoded := range item.RelationTypes {
 		value, err := encoded.toDomain(fmt.Sprintf("artifact.version.relationTypes[%d]", index))
 		if err != nil {
@@ -380,6 +410,13 @@ func (item wireVersion) toModelVersion(modelID identity.UUID, modelName string) 
 			return model.ModelVersion{}, err
 		}
 		draft.AddPropertyDefinition(value)
+	}
+	for index, encoded := range item.EntityKeys {
+		value, err := encoded.toDomain(fmt.Sprintf("artifact.version.entityKeyDefinitions[%d]", index))
+		if err != nil {
+			return model.ModelVersion{}, err
+		}
+		draft.AddEntityKeyDefinition(value)
 	}
 	for index, encoded := range item.Scopes {
 		value, err := encoded.toDomain(fmt.Sprintf("artifact.version.scopeDefinitions[%d]", index))
@@ -423,6 +460,20 @@ func (item wireVersion) toModelVersion(modelID identity.UUID, modelName string) 
 		}
 		draft.AddRule(value)
 	}
+	for index, encoded := range item.Invariants {
+		value, err := encoded.toDomain(fmt.Sprintf("artifact.version.invariants[%d]", index), 0)
+		if err != nil {
+			return model.ModelVersion{}, err
+		}
+		draft.AddInvariant(value)
+	}
+	for index, encoded := range item.FunctionRequirements {
+		value, err := encoded.toDomain(fmt.Sprintf("artifact.version.functionRequirements[%d]", index))
+		if err != nil {
+			return model.ModelVersion{}, err
+		}
+		draft.AddFunctionRequirement(value)
+	}
 	options := model.NewCommitOptions(versionID, item.Label, policy)
 	if item.ParentVersionID != nil {
 		parent, err := parseUUID(*item.ParentVersionID, "artifact.version.parentVersionId")
@@ -435,7 +486,150 @@ func (item wireVersion) toModelVersion(modelID identity.UUID, modelName string) 
 	if err != nil {
 		return model.ModelVersion{}, fmt.Errorf("%w: %w", ErrModelValidation, err)
 	}
+	if len(item.FunctionRequirements) != len(version.FunctionRequirements()) {
+		return model.ModelVersion{}, wireError("artifact.version.functionRequirements", "must exactly match function calls")
+	}
+	for i, requirement := range version.FunctionRequirements() {
+		encoded, e := wireFunctionRequirementFromDomain(requirement)
+		if e != nil {
+			return model.ModelVersion{}, e
+		}
+		if !reflect.DeepEqual(encoded, item.FunctionRequirements[i]) {
+			return model.ModelVersion{}, wireError("artifact.version.functionRequirements", "must exactly match derived requirements")
+		}
+	}
 	return version, nil
+}
+
+func (w wireEnumDefinition) toDomain(path string) (schema.EnumDefinition, error) {
+	id, e := parseUUID(w.ID, path+".id")
+	if e != nil {
+		return schema.EnumDefinition{}, e
+	}
+	opts := make([]schema.EnumOption, len(w.Options))
+	for i, o := range w.Options {
+		x, e := parseUUID(o.ID, fmt.Sprintf("%s.options[%d].id", path, i))
+		if e != nil {
+			return schema.EnumDefinition{}, e
+		}
+		opts[i] = schema.NewEnumOption(x, o.Name)
+	}
+	return schema.NewEnumDefinition(id, w.Name, opts), nil
+}
+func (w wireEntityKey) toDomain(path string) (schema.EntityKeyDefinition, error) {
+	id, e := parseUUID(w.ID, path+".id")
+	if e != nil {
+		return schema.EntityKeyDefinition{}, e
+	}
+	et, e := parseUUID(w.EntityTypeID, path+".entityTypeId")
+	if e != nil {
+		return schema.EntityKeyDefinition{}, e
+	}
+	ps, e := parseIDs(w.PropertyDefinitionIDs, path+".propertyDefinitionIds")
+	if e != nil {
+		return schema.EntityKeyDefinition{}, e
+	}
+	return schema.NewEntityKeyDefinition(id, w.Name, et, ps), nil
+}
+func (w wireCardinality) toDomain(path string) (schema.Cardinality, error) {
+	min, e := strconv.ParseUint(w.Min, 10, 64)
+	if e != nil || w.Min == "" || strconv.FormatUint(min, 10) != w.Min {
+		return schema.Cardinality{}, wireError(path+".min", "must be canonical unsigned integer")
+	}
+	if w.Max == nil {
+		return schema.UnboundedCardinality(min), nil
+	}
+	max, e := strconv.ParseUint(*w.Max, 10, 64)
+	if e != nil || strconv.FormatUint(max, 10) != *w.Max || min > max {
+		return schema.Cardinality{}, wireError(path, "invalid cardinality")
+	}
+	return schema.NewCardinality(min, max, true), nil
+}
+func (w wireInvariant) toDomain(path string, depth int) (invariant.Invariant, error) {
+	id, e := parseUUID(w.ID, path+".id")
+	if e != nil {
+		return invariant.Invariant{}, e
+	}
+	tid, e := parseUUID(w.Subject.TypeID, path+".subject.typeId")
+	if e != nil {
+		return invariant.Invariant{}, e
+	}
+	var s invariant.Subject
+	if w.Subject.Kind == "entity_type" {
+		s = invariant.EntityTypeSubject(tid)
+	} else if w.Subject.Kind == "relation_type" {
+		s = invariant.RelationTypeSubject(tid)
+	} else {
+		return invariant.Invariant{}, wireError(path+".subject.kind", "unknown invariant subject")
+	}
+	a, e := w.Assertion.toDomain(path+".assertion", depth)
+	if e != nil {
+		return invariant.Invariant{}, e
+	}
+	var app ast.Expression
+	if w.Applicability != nil {
+		app, e = w.Applicability.toDomain(path+".applicability", depth)
+		if e != nil {
+			return invariant.Invariant{}, e
+		}
+	}
+	return invariant.New(id, w.Name, s, app, w.Applicability != nil, a), nil
+}
+func (w wireFunctionRequirement) toDomain(path string) (function.Requirement, error) {
+	ref, e := function.NewRef(w.Ref.Namespace, w.Ref.Name, function.Version{Major: w.Ref.Major, Minor: w.Ref.Minor, Patch: w.Ref.Patch})
+	if e != nil {
+		return function.Requirement{}, wireError(path+".ref", "invalid function ref")
+	}
+	ps := make([]typing.Type, len(w.Parameters))
+	for i, x := range w.Parameters {
+		ps[i], e = x.toDomain(fmt.Sprintf("%s.parameters[%d]", path, i))
+		if e != nil {
+			return function.Requirement{}, e
+		}
+	}
+	r, e := w.Result.toDomain(path + ".result")
+	if e != nil {
+		return function.Requirement{}, e
+	}
+	sig, e := function.NewSignature(ps, r, w.NullableResult)
+	if e != nil {
+		return function.Requirement{}, wireError(path, "invalid signature")
+	}
+	return function.NewRequirement(ref, sig)
+}
+func (w wireFunctionType) toDomain(path string) (typing.Type, error) {
+	vt, ok := parseValueType(w.ValueType)
+	if !ok {
+		return typing.Type{}, wireError(path+".valueType", "unknown value type")
+	}
+	tm := typing.TemporalScalar
+	if w.TemporalMode != "scalar" {
+		return typing.Type{}, wireError(path+".temporalMode", "must be scalar")
+	}
+	var u unit.Unit
+	var hu bool
+	var e error
+	if w.Unit != nil {
+		u, e = w.Unit.toDomain(path + ".unit")
+		if e != nil {
+			return typing.Type{}, e
+		}
+		hu = true
+	}
+	if vt == value.Enum {
+		if w.EnumDefinitionID == nil {
+			return typing.Type{}, wireError(path+".enumDefinitionId", "required")
+		}
+		id, e := parseUUID(*w.EnumDefinitionID, path+".enumDefinitionId")
+		if e != nil {
+			return typing.Type{}, e
+		}
+		return typing.NewQualifiedEnum(id, u, hu, tm, w.Nullable), nil
+	}
+	if w.EnumDefinitionID != nil {
+		return typing.Type{}, wireError(path+".enumDefinitionId", "only valid for enum")
+	}
+	return typing.NewQualified(vt, u, hu, tm, w.Nullable), nil
 }
 
 func (item wirePrecision) toDomain(path string) (precision.Policy, error) {
@@ -494,7 +688,20 @@ func (item wireRelationType) toDomain(path string) (schema.RelationType, error) 
 		}
 		hasTo = true
 	}
-	return schema.NewRelationType(id, item.Name, from, hasFrom, to, hasTo, definitions), nil
+	outgoing, incoming := schema.UnboundedCardinality(0), schema.UnboundedCardinality(0)
+	if item.OutgoingCardinality != nil {
+		outgoing, err = item.OutgoingCardinality.toDomain(path + ".outgoingCardinality")
+		if err != nil {
+			return schema.RelationType{}, err
+		}
+	}
+	if item.IncomingCardinality != nil {
+		incoming, err = item.IncomingCardinality.toDomain(path + ".incomingCardinality")
+		if err != nil {
+			return schema.RelationType{}, err
+		}
+	}
+	return schema.NewRelationTypeWithCardinality(id, item.Name, from, hasFrom, to, hasTo, definitions, outgoing, incoming), nil
 }
 
 func (item wireTypeConstraint) toDomain(path string) (schema.TypeConstraint, error) {
@@ -563,6 +770,19 @@ func (item wireContract) toDomain(path string) (schema.PropertyContract, error) 
 	if item.Nullable == nil {
 		return schema.PropertyContract{}, wireError(path+".nullable", "is required")
 	}
+	if typ == value.Enum {
+		if item.EnumDefinitionID == nil {
+			return schema.PropertyContract{}, wireError(path+".enumDefinitionId", "required for enum")
+		}
+		eid, e := parseUUID(*item.EnumDefinitionID, path+".enumDefinitionId")
+		if e != nil {
+			return schema.PropertyContract{}, e
+		}
+		return schema.NewEnumPropertyContract(id, item.Name, eid, dimension, hasDimension, temporal, *item.Nullable), nil
+	}
+	if item.EnumDefinitionID != nil {
+		return schema.PropertyContract{}, wireError(path+".enumDefinitionId", "only valid for enum")
+	}
 	return schema.NewPropertyContract(id, item.Name, typ, dimension, hasDimension, temporal, *item.Nullable), nil
 }
 
@@ -603,6 +823,19 @@ func (item wireProperty) toDomain(path string, depth int) (schema.PropertyDefini
 	if err != nil {
 		return schema.PropertyDefinition{}, err
 	}
+	if typ == value.Enum {
+		if item.EnumDefinitionID == nil {
+			return schema.PropertyDefinition{}, wireError(path+".enumDefinitionId", "required for enum")
+		}
+		eid, e := parseUUID(*item.EnumDefinitionID, path+".enumDefinitionId")
+		if e != nil {
+			return schema.PropertyDefinition{}, e
+		}
+		return schema.NewEnumPropertyDefinition(id, owner, contractID, hasContract, item.Name, eid, propertyUnit, hasUnit, temporal, computation), nil
+	}
+	if item.EnumDefinitionID != nil {
+		return schema.PropertyDefinition{}, wireError(path+".enumDefinitionId", "only valid for enum")
+	}
 	return schema.NewPropertyDefinition(id, owner, contractID, hasContract, item.Name, typ, propertyUnit, hasUnit, temporal, computation), nil
 }
 
@@ -627,7 +860,13 @@ func (item wireComputation) toDomain(path string, depth int) (schema.Computation
 		if item.Expression != nil {
 			return schema.Computation{}, wireError(path+".expression", "must be absent for input computation")
 		}
-		return schema.InputComputation(), nil
+		if item.Presence == "" || item.Presence == "optional" {
+			return schema.InputComputation(), nil
+		}
+		if item.Presence == "required" {
+			return schema.InputComputationWithPresence(schema.PresenceRequired), nil
+		}
+		return schema.Computation{}, wireError(path+".presence", "unknown presence")
 	case "derived":
 		if item.Expression == nil {
 			return schema.Computation{}, wireError(path+".expression", "is required for derived computation")
@@ -896,6 +1135,19 @@ func (item wireRaw) toDomain(path string) (value.Raw, error) {
 			return value.Raw{}, wireError(path+".data", "must be a canonical duration")
 		}
 		return value.NewDuration(parsed), nil
+	case "enum":
+		id, e := parseUUID(item.EnumDefinitionID, path+".enumDefinitionId")
+		if e != nil {
+			return value.Raw{}, e
+		}
+		opt, e := parseUUID(item.EnumOptionID, path+".enumOptionId")
+		if e != nil {
+			return value.Raw{}, e
+		}
+		if item.Data != "" {
+			return value.Raw{}, wireError(path+".data", "must be empty for enum")
+		}
+		return value.NewEnum(id, opt), nil
 	default:
 		return value.Raw{}, wireError(path+".type", "unknown raw value type")
 	}
@@ -1263,6 +1515,69 @@ func (item wireExpression) toDomain(path string, depth int) (ast.Expression, err
 		return ast.NewBoundContractPropertyReference(target, id), nil
 	case "aggregate":
 		return item.aggregateToDomain(path, depth)
+	case "unary":
+		if !item.only("operator", "operand") || item.Operand == nil {
+			return nil, wireError(path, "unary requires operator and operand")
+		}
+		op, ok := parseUnary(item.Operator)
+		if !ok {
+			return nil, wireError(path+".operator", "unknown unary operator")
+		}
+		x, e := item.Operand.toDomain(path+".operand", depth+1)
+		if e != nil {
+			return nil, e
+		}
+		return ast.NewUnary(op, x), nil
+	case "binary":
+		if !item.only("operator", "left", "right") || item.Left == nil || item.Right == nil {
+			return nil, wireError(path, "binary requires operator, left and right")
+		}
+		op, ok := parseBinary(item.Operator)
+		if !ok {
+			return nil, wireError(path+".operator", "unknown binary operator")
+		}
+		l, e := item.Left.toDomain(path+".left", depth+1)
+		if e != nil {
+			return nil, e
+		}
+		r, e := item.Right.toDomain(path+".right", depth+1)
+		if e != nil {
+			return nil, e
+		}
+		return ast.NewBinary(op, l, r), nil
+	case "variadic":
+		if !item.only("operator", "operands") || len(item.Operands) == 0 {
+			return nil, wireError(path, "variadic requires operator and operands")
+		}
+		op, ok := parseVariadic(item.Operator)
+		if !ok {
+			return nil, wireError(path+".operator", "unknown variadic operator")
+		}
+		xs := make([]ast.Expression, len(item.Operands))
+		for i, x := range item.Operands {
+			var e error
+			xs[i], e = x.toDomain(fmt.Sprintf("%s.operands[%d]", path, i), depth+1)
+			if e != nil {
+				return nil, e
+			}
+		}
+		return ast.NewVariadic(op, xs), nil
+	case "function_call":
+		if !item.only("function", "arguments") || item.Function == nil {
+			return nil, wireError(path, "function_call requires function and arguments")
+		}
+		ref, e := function.NewRef(item.Function.Namespace, item.Function.Name, function.Version{Major: item.Function.Major, Minor: item.Function.Minor, Patch: item.Function.Patch})
+		if e != nil {
+			return nil, wireError(path+".function", "invalid function ref")
+		}
+		xs := make([]ast.Expression, len(item.Arguments))
+		for i, x := range item.Arguments {
+			xs[i], e = x.toDomain(fmt.Sprintf("%s.arguments[%d]", path, i), depth+1)
+			if e != nil {
+				return nil, e
+			}
+		}
+		return ast.NewFunctionCall(ref, xs), nil
 	default:
 		return nil, wireError(path+".kind", "unknown expression kind")
 	}
@@ -1427,6 +1742,15 @@ func (item wireExpression) presentFields() []string {
 	if item.Operation != "" {
 		fields = append(fields, "operation")
 	}
+	if item.Operands != nil {
+		fields = append(fields, "operands")
+	}
+	if item.Arguments != nil {
+		fields = append(fields, "arguments")
+	}
+	if item.Function != nil {
+		fields = append(fields, "function")
+	}
 	return fields
 }
 
@@ -1475,6 +1799,8 @@ func parseValueType(text string) (value.Type, bool) {
 		return value.DateTime, true
 	case "duration":
 		return value.Duration, true
+	case "enum":
+		return value.Enum, true
 	default:
 		return value.Invalid, false
 	}
@@ -1560,6 +1886,30 @@ func parseLogical(text string) (ast.LogicalOperator, bool) {
 	default:
 		return ast.LogicalInvalid, false
 	}
+}
+func parseUnary(s string) (ast.UnaryOperator, bool) {
+	for x := ast.UnaryOperatorIsDefined; x <= ast.UnaryOperatorMinute; x++ {
+		if lowerEnum(x.String()) == s {
+			return x, true
+		}
+	}
+	return ast.UnaryOperatorInvalid, false
+}
+func parseBinary(s string) (ast.BinaryOperator, bool) {
+	for x := ast.BinaryOperatorModulo; x <= ast.BinaryOperatorDifference; x++ {
+		if lowerEnum(x.String()) == s {
+			return x, true
+		}
+	}
+	return ast.BinaryOperatorInvalid, false
+}
+func parseVariadic(s string) (ast.VariadicOperator, bool) {
+	for x := ast.VariadicOperatorConcat; x <= ast.VariadicOperatorScalarMax; x++ {
+		if lowerEnum(x.String()) == s {
+			return x, true
+		}
+	}
+	return ast.VariadicOperatorInvalid, false
 }
 func parseBoundTarget(text string) (ast.BoundTarget, bool) {
 	switch text {

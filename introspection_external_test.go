@@ -59,8 +59,8 @@ func TestFrozenV1CompatibilityAndPublicIntrospection(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if fixture.canonical && !bytes.Equal(canonical, []byte(fixture.data)) {
-				t.Fatal("frozen v1 fixture is no longer canonical after decode")
+			if fixture.canonical && bytes.Equal(canonical, []byte(fixture.data)) {
+				t.Fatal("normal encoding must migrate frozen v1 input to canonical v2")
 			}
 			roundTripped, err := bcg.Unmarshal(canonical)
 			if err != nil {
@@ -68,7 +68,7 @@ func TestFrozenV1CompatibilityAndPublicIntrospection(t *testing.T) {
 			}
 			canonicalAgain, err := bcg.Marshal(roundTripped)
 			if err != nil || !bytes.Equal(canonical, canonicalAgain) {
-				t.Fatalf("canonical v1 re-encode changed: %v", err)
+				t.Fatalf("canonical v2 re-encode changed: %v", err)
 			}
 
 			model := artifact.Model()

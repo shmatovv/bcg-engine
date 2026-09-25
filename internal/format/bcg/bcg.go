@@ -17,11 +17,14 @@ import (
 
 const (
 	// FormatVersion is the current version of the portable BCG wire schema.
-	FormatVersion = 1
+	// FormatVersion is the current canonical BCG wire schema.  It is not the
+	// Go module version; the decoder continues to accept the historical v1.
+	FormatVersion = 2
 
 	// EngineCompatibilityV1 identifies the semantic engine generation that
 	// understands BCG format v1. It is intentionally not a git revision.
 	EngineCompatibilityV1 = "bcg-engine-v1"
+	EngineCompatibilityV2 = "bcg-engine-v2"
 )
 
 var (

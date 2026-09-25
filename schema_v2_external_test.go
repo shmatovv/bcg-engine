@@ -1,14 +1,14 @@
 package bcg_test
 
 import (
-	"errors"
+	"bytes"
 	bcg "github.com/shmatovv/bcg-engine/v2"
 	"testing"
 )
 
 // This external-only test locks down public Schema v2 authoring and
 // inspection without relying on internal AST or model packages.
-func TestSchemaV2PublicAuthoringAndV1WireBoundary(t *testing.T) {
+func TestSchemaV2PublicAuthoringAndV2WireRoundTrip(t *testing.T) {
 	policy := mustPolicy(t)
 	model, err := bcg.NewModel(bcg.NewID(), "v2 schema")
 	if err != nil {
@@ -109,7 +109,23 @@ func TestSchemaV2PublicAuthoringAndV1WireBoundary(t *testing.T) {
 	if err != nil || result.State() != bcg.InvariantSatisfied {
 		t.Fatalf("invariant = %#v, %v", result, err)
 	}
-	if _, err := bcg.NewArtifact(committed); !errors.Is(err, bcg.ErrWireSemantic) {
-		t.Fatalf("v1 artifact must reject v2 schema, got %v", err)
+	artifact, err := bcg.NewArtifact(committed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := bcg.Marshal(artifact)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decoded, err := bcg.Unmarshal(data)
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, err := bcg.Marshal(decoded)
+	if err != nil || !bytes.Equal(data, again) {
+		t.Fatalf("v2 canonical round trip: %v", err)
+	}
+	if len(decoded.Model().EnumDefinitions()) != 1 || len(decoded.Model().EntityKeyDefinitions()) != 1 || len(decoded.Model().InvariantDefinitions()) != 1 {
+		t.Fatal("v2 declarations did not round trip")
 	}
 }

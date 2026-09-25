@@ -4,7 +4,8 @@
 
 > **Runtime Dataset API.** This README documents the complete public Go API
 > for the current engine, including immutable external runtime datasets. The
-> `.bcg` wire-format contract is intentionally documented separately in
+> `.bcg` wire-format contracts are documented in
+> [`docs/bcg-format-v2.md`](docs/bcg-format-v2.md) and the retained historical
 > [`docs/bcg-format-v1.md`](docs/bcg-format-v1.md).
 
 <a id="english-reference"></a>
@@ -19,11 +20,12 @@ Module: `github.com/shmatovv/bcg-engine/v2`. Requires Go 1.22 or newer.
 This is a private, proprietary library.
 
 v1.2.0 (`d7cc776`) remains the stable historical v1 release. This v2 module
-currently preserves v1 behavior and `.bcg v1` decoding while adding public
+reads `.bcg v1` and writes canonical `.bcg v2` while adding public
 lossless inspection and Schema v2 declarations: UUID-identified Enums, Input
 presence policies, Entity keys, directional Relation cardinality, and
-subject-relative Invariants. `.bcg v2`, extension functions, dataset
-patches/rebases, model evolution, and dependency planning remain deferred.
+subject-relative Invariants. Extension functions are represented by portable
+requirements and calls; dataset patches/rebases, model evolution, and
+dependency planning remain deferred.
 
 Expression v2 currently adds deterministic state predicates (`IsDefined`,
 `IsUndefined`, `IsNull`), exact numeric transforms (`Abs`, `Round`, `Floor`,
@@ -40,11 +42,9 @@ identity and an immutable typed signature. There is no package-global
 registration: missing or incompatible implementations return
 `ErrIncompatibleRuntime` when a requirement is bound.
 
-Schema v2 declarations are in-memory model semantics for now. The v1 wire
-format is intentionally not extended: `NewArtifact` returns `ErrWireSemantic`
-for a model containing an Enum, key, invariant, required presence, non-default
-cardinality, or enum-typed property. Existing v1 artifacts continue to decode
-with optional input presence and `0..N` cardinality defaults.
+Schema v2 declarations round-trip in `.bcg v2`. Existing v1 artifacts continue
+to decode with optional input presence and `0..N` cardinality defaults; normal
+encoding migrates them to semantically equivalent canonical v2 bytes.
 
 Enums retain definition and option UUIDs independently of names. An enum
 property specifies `ValueType: bcg.EnumType` and its `EnumDefinitionID`.

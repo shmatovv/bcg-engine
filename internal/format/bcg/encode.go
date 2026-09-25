@@ -9,6 +9,7 @@ import (
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/address"
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/constraint"
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/identity"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/invariant"
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/rule"
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/scenario"
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/schema"
@@ -16,6 +17,8 @@ import (
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/semantic"
 	domaintime "github.com/shmatovv/bcg-engine/v2/internal/domain/time"
 	"github.com/shmatovv/bcg-engine/v2/internal/expression/ast"
+	"github.com/shmatovv/bcg-engine/v2/internal/expression/typing"
+	"github.com/shmatovv/bcg-engine/v2/internal/function"
 	"github.com/shmatovv/bcg-engine/v2/internal/model"
 	"github.com/shmatovv/bcg-engine/v2/internal/types/precision"
 	"github.com/shmatovv/bcg-engine/v2/internal/types/rational"
@@ -49,7 +52,7 @@ func newWireDocument(artifact Artifact) (wireDocument, error) {
 	sort.Slice(resultScenarios, func(i, j int) bool { return resultScenarios[i].ID < resultScenarios[j].ID })
 	return wireDocument{
 		FormatVersion:       FormatVersion,
-		EngineCompatibility: EngineCompatibilityV1,
+		EngineCompatibility: EngineCompatibilityV2,
 		Artifact: wireArtifact{
 			Model:     wireModel{ID: artifact.version.ModelID().String(), Name: artifact.modelName},
 			Version:   version,
@@ -61,21 +64,25 @@ func newWireDocument(artifact Artifact) (wireDocument, error) {
 func wireVersionFromDomain(version model.ModelVersion) (wireVersion, error) {
 	parent, hasParent := version.ParentVersionID()
 	result := wireVersion{
-		ID:            version.ID().String(),
-		ModelID:       version.ModelID().String(),
-		Label:         version.VersionLabel(),
-		Precision:     wirePrecisionFromDomain(version.PrecisionPolicy()),
-		EntityTypes:   make([]wireEntityType, len(version.EntityTypes())),
-		RelationTypes: make([]wireRelationType, len(version.RelationTypes())),
-		Traits:        make([]wireTrait, len(version.Traits())),
-		Contracts:     make([]wireContract, len(version.PropertyContracts())),
-		Properties:    make([]wireProperty, len(version.PropertyDefinitions())),
-		Scopes:        make([]wireScope, len(version.ScopeDefinitions())),
-		Entities:      make([]wireEntity, len(version.Entities())),
-		Relations:     make([]wireRelation, len(version.Relations())),
-		Bindings:      make([]wireBinding, len(version.ValueBindings())),
-		Constraints:   make([]wireConstraint, len(version.Constraints())),
-		Rules:         make([]wireRule, len(version.Rules())),
+		ID:                   version.ID().String(),
+		ModelID:              version.ModelID().String(),
+		Label:                version.VersionLabel(),
+		Precision:            wirePrecisionFromDomain(version.PrecisionPolicy()),
+		EntityTypes:          make([]wireEntityType, len(version.EntityTypes())),
+		EnumDefinitions:      make([]wireEnumDefinition, len(version.EnumDefinitions())),
+		EntityKeys:           make([]wireEntityKey, len(version.EntityKeyDefinitions())),
+		RelationTypes:        make([]wireRelationType, len(version.RelationTypes())),
+		Traits:               make([]wireTrait, len(version.Traits())),
+		Contracts:            make([]wireContract, len(version.PropertyContracts())),
+		Properties:           make([]wireProperty, len(version.PropertyDefinitions())),
+		Scopes:               make([]wireScope, len(version.ScopeDefinitions())),
+		Entities:             make([]wireEntity, len(version.Entities())),
+		Relations:            make([]wireRelation, len(version.Relations())),
+		Bindings:             make([]wireBinding, len(version.ValueBindings())),
+		Constraints:          make([]wireConstraint, len(version.Constraints())),
+		Rules:                make([]wireRule, len(version.Rules())),
+		Invariants:           make([]wireInvariant, len(version.Invariants())),
+		FunctionRequirements: make([]wireFunctionRequirement, len(version.FunctionRequirements())),
 	}
 	if hasParent {
 		value := parent.String()
@@ -84,6 +91,12 @@ func wireVersionFromDomain(version model.ModelVersion) (wireVersion, error) {
 
 	for index, item := range version.EntityTypes() {
 		result.EntityTypes[index] = wireEntityTypeFromDomain(item)
+	}
+	for index, item := range version.EnumDefinitions() {
+		result.EnumDefinitions[index] = wireEnumDefinitionFromDomain(item)
+	}
+	for index, item := range version.EntityKeyDefinitions() {
+		result.EntityKeys[index] = wireEntityKeyFromDomain(item)
 	}
 	for index, item := range version.RelationTypes() {
 		encoded, err := wireRelationTypeFromDomain(item)
@@ -139,8 +152,24 @@ func wireVersionFromDomain(version model.ModelVersion) (wireVersion, error) {
 		}
 		result.Rules[index] = encoded
 	}
+	for index, item := range version.Invariants() {
+		encoded, err := wireInvariantFromDomain(item)
+		if err != nil {
+			return wireVersion{}, err
+		}
+		result.Invariants[index] = encoded
+	}
+	for index, item := range version.FunctionRequirements() {
+		encoded, err := wireFunctionRequirementFromDomain(item)
+		if err != nil {
+			return wireVersion{}, err
+		}
+		result.FunctionRequirements[index] = encoded
+	}
 
 	sort.Slice(result.EntityTypes, func(i, j int) bool { return result.EntityTypes[i].ID < result.EntityTypes[j].ID })
+	sort.Slice(result.EnumDefinitions, func(i, j int) bool { return result.EnumDefinitions[i].ID < result.EnumDefinitions[j].ID })
+	sort.Slice(result.EntityKeys, func(i, j int) bool { return result.EntityKeys[i].ID < result.EntityKeys[j].ID })
 	sort.Slice(result.RelationTypes, func(i, j int) bool { return result.RelationTypes[i].ID < result.RelationTypes[j].ID })
 	sort.Slice(result.Traits, func(i, j int) bool { return result.Traits[i].ID < result.Traits[j].ID })
 	sort.Slice(result.Contracts, func(i, j int) bool { return result.Contracts[i].ID < result.Contracts[j].ID })
@@ -151,7 +180,87 @@ func wireVersionFromDomain(version model.ModelVersion) (wireVersion, error) {
 	sortWireByJSON(result.Bindings)
 	sort.Slice(result.Constraints, func(i, j int) bool { return result.Constraints[i].ID < result.Constraints[j].ID })
 	sort.Slice(result.Rules, func(i, j int) bool { return result.Rules[i].ID < result.Rules[j].ID })
+	sort.Slice(result.Invariants, func(i, j int) bool { return result.Invariants[i].ID < result.Invariants[j].ID })
+	sort.Slice(result.FunctionRequirements, func(i, j int) bool {
+		a, b := result.FunctionRequirements[i].Ref, result.FunctionRequirements[j].Ref
+		return fmt.Sprintf("%d:%s%d:%s@%010d.%010d.%010d", len(a.Namespace), a.Namespace, len(a.Name), a.Name, a.Major, a.Minor, a.Patch) < fmt.Sprintf("%d:%s%d:%s@%010d.%010d.%010d", len(b.Namespace), b.Namespace, len(b.Name), b.Name, b.Major, b.Minor, b.Patch)
+	})
 	return result, nil
+}
+
+func wireEnumDefinitionFromDomain(d schema.EnumDefinition) wireEnumDefinition {
+	r := wireEnumDefinition{ID: d.ID().String(), Name: d.Name(), Options: make([]wireEnumOption, len(d.Options()))}
+	for i, o := range d.Options() {
+		r.Options[i] = wireEnumOption{ID: o.ID().String(), Name: o.Name()}
+	}
+	sort.Slice(r.Options, func(i, j int) bool { return r.Options[i].ID < r.Options[j].ID })
+	return r
+}
+func wireEntityKeyFromDomain(k schema.EntityKeyDefinition) wireEntityKey {
+	return wireEntityKey{ID: k.ID().String(), Name: k.Name(), EntityTypeID: k.EntityTypeID().String(), PropertyDefinitionIDs: func() []string {
+		ids := k.PropertyDefinitionIDs()
+		r := make([]string, len(ids))
+		for i, id := range ids {
+			r[i] = id.String()
+		}
+		return r
+	}()}
+}
+func wireCardinalityFromDomain(c schema.Cardinality) wireCardinality {
+	r := wireCardinality{Min: strconv.FormatUint(c.Min(), 10)}
+	if m, ok := c.Max(); ok {
+		s := strconv.FormatUint(m, 10)
+		r.Max = &s
+	}
+	return r
+}
+func wireInvariantFromDomain(i invariant.Invariant) (wireInvariant, error) {
+	a, e := wireExpressionFromDomain(i.Assertion())
+	if e != nil {
+		return wireInvariant{}, e
+	}
+	r := wireInvariant{ID: i.ID().String(), Name: i.Name(), Subject: wireInvariantSubject{TypeID: i.Subject().TypeID().String()}, Assertion: a}
+	if i.Subject().Kind() == invariant.SubjectEntityType {
+		r.Subject.Kind = "entity_type"
+	} else {
+		r.Subject.Kind = "relation_type"
+	}
+	if x, ok := i.Applicability(); ok {
+		q, e := wireExpressionFromDomain(x)
+		if e != nil {
+			return wireInvariant{}, e
+		}
+		r.Applicability = &q
+	}
+	return r, nil
+}
+func wireFunctionRequirementFromDomain(r function.Requirement) (wireFunctionRequirement, error) {
+	x := wireFunctionRequirement{Ref: wireFunctionRef{Namespace: r.Ref().Namespace, Name: r.Ref().Name, Major: r.Ref().Version.Major, Minor: r.Ref().Version.Minor, Patch: r.Ref().Version.Patch}, NullableResult: r.Signature().NullableResult()}
+	for _, p := range r.Signature().Parameters() {
+		q, e := wireFunctionTypeFromDomain(p)
+		if e != nil {
+			return x, e
+		}
+		x.Parameters = append(x.Parameters, q)
+	}
+	q, e := wireFunctionTypeFromDomain(r.Signature().Result())
+	x.Result = q
+	return x, e
+}
+func wireFunctionTypeFromDomain(t typing.Type) (wireFunctionType, error) {
+	r := wireFunctionType{ValueType: lowerEnum(t.ValueType().String()), TemporalMode: lowerEnum(t.TemporalMode().String()), Nullable: t.Nullable()}
+	if id, ok := t.EnumDefinitionID(); ok {
+		s := id.String()
+		r.EnumDefinitionID = &s
+	}
+	if u, ok := t.Unit(); ok {
+		q, e := wireUnitFromDomain(u)
+		if e != nil {
+			return r, e
+		}
+		r.Unit = &q
+	}
+	return r, nil
 }
 
 func wirePrecisionFromDomain(policy precision.Policy) wirePrecision {
@@ -166,6 +275,8 @@ func wireRelationTypeFromDomain(item schema.RelationType) (wireRelationType, err
 	from, hasFrom := item.From()
 	to, hasTo := item.To()
 	result := wireRelationType{ID: item.ID().String(), Name: item.Name(), PropertyDefinitions: sortedIDs(item.PropertyDefinitions())}
+	o, in := wireCardinalityFromDomain(item.OutgoingCardinality()), wireCardinalityFromDomain(item.IncomingCardinality())
+	result.OutgoingCardinality, result.IncomingCardinality = &o, &in
 	if hasFrom {
 		encoded, err := wireTypeConstraintFromDomain(from)
 		if err != nil {
@@ -206,6 +317,10 @@ func wireContractFromDomain(item schema.PropertyContract) wireContract {
 		encoded := wireDimensionFromDomain(dimension)
 		result.Dimension = &encoded
 	}
+	if id, ok := item.EnumDefinitionID(); ok {
+		x := id.String()
+		result.EnumDefinitionID = &x
+	}
 	return result
 }
 
@@ -227,6 +342,10 @@ func wirePropertyFromDomain(item schema.PropertyDefinition) (wireProperty, error
 		return wireProperty{}, err
 	}
 	result.Computation = computation
+	if id, ok := item.EnumDefinitionID(); ok {
+		x := id.String()
+		result.EnumDefinitionID = &x
+	}
 	return result, nil
 }
 
@@ -452,6 +571,10 @@ func wireRawFromDomain(item value.Raw) (wireRaw, error) {
 		return wireRaw{Type: "datetime", Data: item.DateTime().String()}, nil
 	case value.Duration:
 		return wireRaw{Type: "duration", Data: item.Duration().String()}, nil
+	case value.Enum:
+		d, _ := item.EnumDefinitionID()
+		o, _ := item.EnumOptionID()
+		return wireRaw{Type: "enum", EnumDefinitionID: d.String(), EnumOptionID: o.String()}, nil
 	default:
 		return wireRaw{}, fmt.Errorf("%w: unsupported raw value type", ErrWireSemantic)
 	}
@@ -528,7 +651,12 @@ func wireRationalFromDomain(item rational.Rational) wireRational {
 func wireComputationFromDomain(item schema.Computation) (wireComputation, error) {
 	switch item.Kind() {
 	case schema.ComputationInput:
-		return wireComputation{Kind: "input"}, nil
+		p, _ := item.Presence()
+		presence := "optional"
+		if p == schema.PresenceRequired {
+			presence = "required"
+		}
+		return wireComputation{Kind: "input", Presence: presence}, nil
 	case schema.ComputationDerived:
 		expression, _ := item.Expression()
 		encoded, err := wireExpressionFromDomain(expression)
@@ -624,6 +752,40 @@ func wireExpressionFromDomain(expression ast.Expression) (wireExpression, error)
 		return wireAggregateExpression(node)
 	case *ast.Aggregate:
 		return wireAggregateExpression(*node)
+	case ast.Unary:
+		q, e := wireUnaryExpression("unary", node.Operand())
+		q.Operator = lowerEnum(node.Operator().String())
+		return q, e
+	case *ast.Unary:
+		return wireExpressionFromDomain(*node)
+	case ast.Binary:
+		return wireBinaryExpression("binary", lowerEnum(node.Operator().String()), node.Left(), node.Right())
+	case *ast.Binary:
+		return wireExpressionFromDomain(*node)
+	case ast.Variadic:
+		r := wireExpression{Kind: "variadic", Operator: lowerEnum(node.Operator().String())}
+		for _, v := range node.Operands() {
+			q, e := wireExpressionFromDomain(v)
+			if e != nil {
+				return r, e
+			}
+			r.Operands = append(r.Operands, q)
+		}
+		return r, nil
+	case *ast.Variadic:
+		return wireExpressionFromDomain(*node)
+	case ast.FunctionCall:
+		r := wireExpression{Kind: "function_call", Function: &wireFunctionRef{Namespace: node.Ref().Namespace, Name: node.Ref().Name, Major: node.Ref().Version.Major, Minor: node.Ref().Version.Minor, Patch: node.Ref().Version.Patch}}
+		for _, v := range node.Arguments() {
+			q, e := wireExpressionFromDomain(v)
+			if e != nil {
+				return r, e
+			}
+			r.Arguments = append(r.Arguments, q)
+		}
+		return r, nil
+	case *ast.FunctionCall:
+		return wireExpressionFromDomain(*node)
 	default:
 		return wireExpression{}, fmt.Errorf("%w: unsupported AST node %T", ErrWireSemantic, expression)
 	}

@@ -302,8 +302,8 @@ func TestPhase34FunctionCallExternal(t *testing.T) {
 		t.Fatalf("exact version error = %v", err)
 	}
 
-	if _, err := bcg.NewArtifact(model); !errors.Is(err, bcg.ErrWireSemantic) {
-		t.Fatalf("v1 must reject FunctionCall model: %v", err)
+	if _, err := bcg.NewArtifact(model); err != nil {
+		t.Fatalf("v2 must serialize FunctionCall model: %v", err)
 	}
 }
 
