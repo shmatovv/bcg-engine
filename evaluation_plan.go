@@ -3,6 +3,9 @@ package bcg
 import (
 	"fmt"
 	"sort"
+
+	"github.com/shmatovv/bcg-engine/v2/internal/expression/ast"
+	"github.com/shmatovv/bcg-engine/v2/internal/graph/dependency"
 )
 
 // PropertyTarget identifies a property definition on its owning schema type.
@@ -238,10 +241,8 @@ func (b *planBuilder) walkDefinition(d PropertyDefinition) {
 			}
 		}
 	}
-	c := d.Computation()
-	expr, ok := c.Expression()
-	if ok {
-		b.walkExpression(expr, nil, nil)
+	if expression, ok := d.value.Computation().Expression(); ok {
+		b.walkStatic(expression)
 	}
 }
 func (b *planBuilder) addDefinition(id ID) {
@@ -249,83 +250,78 @@ func (b *planBuilder) addDefinition(id ID) {
 		b.walkDefinition(d)
 	}
 }
-func (b *planBuilder) walkExpression(e Expression, filter, mapped map[ID]PropertyDefinition) {
-	if ref, ok := e.PropertyReference(); ok {
-		switch ref.Kind() {
-		case PropertyReferenceSelf, PropertyReferenceBoundDefinition:
-			if id, ok := ref.DefinitionID(); ok {
-				b.addDefinition(id)
-				if filter != nil {
-					filter[id] = b.byID[id]
-				}
-				if mapped != nil {
-					mapped[id] = b.byID[id]
+func (b *planBuilder) walkStatic(expression ast.Expression) {
+	requirements, err := dependency.AnalyzeStatic(expression)
+	if err != nil {
+		return
+	} // committed Models have already passed the same gate during graph build.
+	type traversal struct {
+		source         TraversalSource
+		filter, mapped map[ID]PropertyDefinition
+	}
+	traversals := map[uint32]*traversal{}
+	order := []uint32{}
+	add := func(id ID, phase dependency.StaticPhase, traversalID uint32) {
+		d, ok := b.byID[id]
+		if !ok {
+			return
+		}
+		b.walkDefinition(d)
+		if current := traversals[traversalID]; current != nil {
+			if phase == dependency.StaticPhaseFilter {
+				current.filter[id] = d
+			}
+			if phase == dependency.StaticPhaseMap {
+				current.mapped[id] = d
+			}
+		}
+	}
+	for _, requirement := range requirements {
+		switch requirement.Kind() {
+		case dependency.StaticTraversal:
+			internal, _ := requirement.Traversal()
+			source := TraversalSource{value: internal}
+			traversals[requirement.TraversalID()] = &traversal{source: source, filter: map[ID]PropertyDefinition{}, mapped: map[ID]PropertyDefinition{}}
+			order = append(order, requirement.TraversalID())
+			for _, relationType := range b.model.RelationTypeDefinitions() {
+				if relationType.ID() == source.RelationTypeID() {
+					b.addRelationType(relationType)
 				}
 			}
-		case PropertyReferenceAbsolute:
-			if a, ok := ref.Address(); ok {
-				b.embedded[a] = struct{}{}
-				b.addDefinition(a.DefinitionID())
-				if filter != nil {
-					filter[a.DefinitionID()] = b.byID[a.DefinitionID()]
-				}
-				if mapped != nil {
-					mapped[a.DefinitionID()] = b.byID[a.DefinitionID()]
-				}
-			}
-		case PropertyReferenceBoundContract:
-			if id, ok := ref.ContractID(); ok {
-				for _, d := range b.byID {
-					c, has := d.ContractID()
-					if has && c == id {
-						b.walkDefinition(d)
-						if filter != nil {
-							filter[d.ID()] = d
-						}
-						if mapped != nil {
-							mapped[d.ID()] = d
-						}
+			for _, relation := range b.model.Relations() {
+				if relation.TypeID() == source.RelationTypeID() {
+					if applicability, ok := relation.Applicability(); ok {
+						b.walkStatic(applicability.value)
 					}
 				}
 			}
-		}
-	}
-	if aggregate, ok := e.AggregateOperation(); ok {
-		source := aggregate.Source()
-		for _, r := range b.model.RelationTypeDefinitions() {
-			if r.ID() == source.RelationTypeID() {
-				b.addRelationType(r)
+		case dependency.StaticSelfProperty, dependency.StaticBoundProperty, dependency.StaticAbsoluteProperty:
+			if address, ok := requirement.Address(); ok {
+				public := addressFromInternal(address)
+				b.embedded[public] = struct{}{}
 			}
-		}
-		for _, relation := range b.model.Relations() {
-			if relation.TypeID() == source.RelationTypeID() {
-				if applicability, ok := relation.Applicability(); ok {
-					b.walkExpression(applicability, nil, nil)
+			add(idFromInternal(requirement.DefinitionID()), requirement.Phase(), requirement.TraversalID())
+		case dependency.StaticBoundContract:
+			contract := idFromInternal(requirement.ContractID())
+			for _, candidate := range b.byID {
+				candidateContract, has := candidate.ContractID()
+				if has && candidateContract == contract {
+					add(candidate.ID(), requirement.Phase(), requirement.TraversalID())
+				}
+			}
+		case dependency.StaticFunction:
+			ref, _ := requirement.Function()
+			public := functionRefFromInternal(ref)
+			for _, candidate := range b.model.FunctionRequirements() {
+				if candidate.Ref().String() == public.String() {
+					b.functions[public.String()] = candidate
 				}
 			}
 		}
-		if id, ok := source.AbsoluteEntityID(); ok { // this is known concrete embedded runtime identity, but no property address exists for it
-			_ = id
-		}
-		f, mp := map[ID]PropertyDefinition{}, map[ID]PropertyDefinition{}
-		if x, ok := aggregate.Filter(); ok {
-			b.walkExpression(x, f, nil)
-		}
-		if x, ok := aggregate.Map(); ok {
-			b.walkExpression(x, nil, mp)
-		}
-		b.traversals = append(b.traversals, TraversalRequirement{source: source, filter: sortedDefinitions(f), mapped: sortedDefinitions(mp)})
-		return
 	}
-	if call, ok := e.FunctionCall(); ok {
-		for _, r := range b.model.FunctionRequirements() {
-			if r.Ref().String() == call.Ref().String() {
-				b.functions[r.Ref().String()] = r
-			}
-		}
-	}
-	for _, child := range e.Children() {
-		b.walkExpression(child, filter, mapped)
+	for _, id := range order {
+		current := traversals[id]
+		b.traversals = append(b.traversals, TraversalRequirement{source: current.source, filter: sortedDefinitions(current.filter), mapped: sortedDefinitions(current.mapped)})
 	}
 }
 

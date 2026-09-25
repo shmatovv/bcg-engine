@@ -31,6 +31,14 @@ func TestPublicPlanEvaluationDirectAndTraversal(t *testing.T) {
 	if _, err := model.PlanEvaluation([]bcg.PropertyTarget{{}}); err == nil {
 		t.Fatal("invalid target accepted")
 	}
+	at, _ := bcg.ParseDateTime("2026-01-02T03:04:05Z")
+	context, err := bcg.NewCalculationContextAt(at)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := model.PlanEvaluationWithContext([]bcg.PropertyTarget{target}, context); err != nil {
+		t.Fatalf("context plan: %v", err)
+	}
 
 	aggregate, err := bcg.Unmarshal([]byte(publicAggregateArtifact))
 	if err != nil {
@@ -57,6 +65,28 @@ func TestPublicPlanEvaluationDirectAndTraversal(t *testing.T) {
 	req := aggregatePlan.TraversalRequirements()[0]
 	if req.Direction() != bcg.TraverseOutgoing || len(req.FilterDependencies()) == 0 || len(req.MapDependencies()) == 0 {
 		t.Fatalf("traversal requirement omitted filter/map dependency: %#v", req)
+	}
+}
+
+func TestPublicPlanEvaluationFunctionRequirement(t *testing.T) {
+	model, _, _, _ := phase34BenchmarkFunction(t)
+	var derived bcg.PropertyDefinition
+	for _, candidate := range model.PropertyDefinitionDeclarations() {
+		if candidate.Computation().Kind() == bcg.ComputationDerived {
+			derived = candidate
+			break
+		}
+	}
+	target, err := bcg.PropertyDefinitionTarget(derived)
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan, err := model.PlanEvaluation([]bcg.PropertyTarget{target})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(plan.FunctionRequirements()) != 1 {
+		t.Fatalf("function requirements = %#v", plan.FunctionRequirements())
 	}
 }
 
