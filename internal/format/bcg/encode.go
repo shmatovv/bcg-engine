@@ -235,7 +235,7 @@ func wireInvariantFromDomain(i invariant.Invariant) (wireInvariant, error) {
 	return r, nil
 }
 func wireFunctionRequirementFromDomain(r function.Requirement) (wireFunctionRequirement, error) {
-	x := wireFunctionRequirement{Ref: wireFunctionRef{Namespace: r.Ref().Namespace, Name: r.Ref().Name, Major: r.Ref().Version.Major, Minor: r.Ref().Version.Minor, Patch: r.Ref().Version.Patch}, NullableResult: r.Signature().NullableResult()}
+	x := wireFunctionRequirement{Ref: wireFunctionRef{Namespace: r.Ref().Namespace, Name: r.Ref().Name, Major: r.Ref().Version.Major, Minor: r.Ref().Version.Minor, Patch: r.Ref().Version.Patch}, Parameters: []wireFunctionType{}, NullableResult: r.Signature().NullableResult()}
 	for _, p := range r.Signature().Parameters() {
 		q, e := wireFunctionTypeFromDomain(p)
 		if e != nil {
@@ -544,7 +544,7 @@ func wireTypedFromDomain(item value.Typed) (wireTyped, error) {
 	if err != nil {
 		return wireTyped{}, err
 	}
-	result := wireTyped{Type: raw.Type, Data: raw.Data}
+	result := wireTyped{Type: raw.Type, Data: raw.Data, EnumDefinitionID: raw.EnumDefinitionID, EnumOptionID: raw.EnumOptionID}
 	if item.HasUnit() {
 		encoded, err := wireUnitFromDomain(item.Unit())
 		if err != nil {

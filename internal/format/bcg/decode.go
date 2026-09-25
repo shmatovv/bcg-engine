@@ -1079,7 +1079,7 @@ func effectivePeriodToDomain(item *wireEffectivePeriod, path string) (domaintime
 }
 
 func (item wireTyped) toDomain(path string) (value.Typed, error) {
-	raw, err := (wireRaw{Type: item.Type, Data: item.Data}).toDomain(path)
+	raw, err := (wireRaw{Type: item.Type, Data: item.Data, EnumDefinitionID: item.EnumDefinitionID, EnumOptionID: item.EnumOptionID}).toDomain(path)
 	if err != nil {
 		return value.Typed{}, err
 	}

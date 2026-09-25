@@ -222,9 +222,11 @@ type wireTarget struct {
 }
 
 type wireTyped struct {
-	Type string    `json:"type"`
-	Data string    `json:"data"`
-	Unit *wireUnit `json:"unit"`
+	Type             string    `json:"type"`
+	Data             string    `json:"data"`
+	EnumDefinitionID string    `json:"enumDefinitionId,omitempty"`
+	EnumOptionID     string    `json:"enumOptionId,omitempty"`
+	Unit             *wireUnit `json:"unit"`
 }
 
 type wireBindingValue struct {
