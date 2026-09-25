@@ -3,7 +3,7 @@ package dependency
 import (
 	"sort"
 
-	"github.com/shmatovv/bcg-engine/internal/domain/address"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/address"
 )
 
 // Cycle represents one cyclic strongly connected component of the concrete

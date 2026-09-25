@@ -1,6 +1,6 @@
 package time
 
-import "github.com/shmatovv/bcg-engine/internal/types/datetime"
+import "github.com/shmatovv/bcg-engine/v2/internal/types/datetime"
 
 // ContextKind identifies the temporal mode of one calculation.
 type ContextKind uint8

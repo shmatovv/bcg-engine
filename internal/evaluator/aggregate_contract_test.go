@@ -3,18 +3,18 @@ package evaluator_test
 import (
 	"testing"
 
-	"github.com/shmatovv/bcg-engine/internal/domain/address"
-	"github.com/shmatovv/bcg-engine/internal/domain/identity"
-	"github.com/shmatovv/bcg-engine/internal/domain/schema"
-	"github.com/shmatovv/bcg-engine/internal/domain/scope"
-	"github.com/shmatovv/bcg-engine/internal/domain/semantic"
-	domaintime "github.com/shmatovv/bcg-engine/internal/domain/time"
-	"github.com/shmatovv/bcg-engine/internal/evaluator"
-	"github.com/shmatovv/bcg-engine/internal/expression/ast"
-	"github.com/shmatovv/bcg-engine/internal/model"
-	"github.com/shmatovv/bcg-engine/internal/runtime"
-	"github.com/shmatovv/bcg-engine/internal/types/unit"
-	"github.com/shmatovv/bcg-engine/internal/types/value"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/address"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/identity"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/schema"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/scope"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/semantic"
+	domaintime "github.com/shmatovv/bcg-engine/v2/internal/domain/time"
+	"github.com/shmatovv/bcg-engine/v2/internal/evaluator"
+	"github.com/shmatovv/bcg-engine/v2/internal/expression/ast"
+	"github.com/shmatovv/bcg-engine/v2/internal/model"
+	"github.com/shmatovv/bcg-engine/v2/internal/runtime"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/unit"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/value"
 )
 
 func TestAggregateResolvesPolymorphicBoundContractProperties(t *testing.T) {

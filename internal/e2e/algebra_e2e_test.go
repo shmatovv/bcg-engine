@@ -4,8 +4,8 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/shmatovv/bcg-engine/internal/types/rational"
-	"github.com/shmatovv/bcg-engine/internal/types/unit"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/rational"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/unit"
 )
 
 func TestE2E_RationalExactArithmetic(t *testing.T) {

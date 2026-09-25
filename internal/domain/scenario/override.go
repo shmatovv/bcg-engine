@@ -1,11 +1,11 @@
 package scenario
 
 import (
-	"github.com/shmatovv/bcg-engine/internal/domain/address"
-	"github.com/shmatovv/bcg-engine/internal/domain/identity"
-	"github.com/shmatovv/bcg-engine/internal/domain/scope"
-	"github.com/shmatovv/bcg-engine/internal/domain/semantic"
-	domaintime "github.com/shmatovv/bcg-engine/internal/domain/time"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/address"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/identity"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/scope"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/semantic"
+	domaintime "github.com/shmatovv/bcg-engine/v2/internal/domain/time"
 )
 
 // Override is one immutable value override stored by a Scenario.

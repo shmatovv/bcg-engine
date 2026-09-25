@@ -1,7 +1,7 @@
 package value
 
 import (
-	"github.com/shmatovv/bcg-engine/internal/types/unit"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/unit"
 )
 
 // Typed represents a typed engine value.

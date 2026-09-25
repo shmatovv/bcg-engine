@@ -1,8 +1,8 @@
 package dependency
 
 import (
-	"github.com/shmatovv/bcg-engine/internal/domain/address"
-	"github.com/shmatovv/bcg-engine/internal/expression/ast"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/address"
+	"github.com/shmatovv/bcg-engine/v2/internal/expression/ast"
 )
 
 // ExtractStandaloneExpression returns every concrete PropertyAddress directly

@@ -4,14 +4,14 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/shmatovv/bcg-engine/internal/domain/identity"
-	"github.com/shmatovv/bcg-engine/internal/domain/schema"
-	"github.com/shmatovv/bcg-engine/internal/expression/ast"
-	"github.com/shmatovv/bcg-engine/internal/types/decimal"
-	"github.com/shmatovv/bcg-engine/internal/types/precision"
-	"github.com/shmatovv/bcg-engine/internal/types/rational"
-	"github.com/shmatovv/bcg-engine/internal/types/unit"
-	"github.com/shmatovv/bcg-engine/internal/types/value"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/identity"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/schema"
+	"github.com/shmatovv/bcg-engine/v2/internal/expression/ast"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/decimal"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/precision"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/rational"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/unit"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/value"
 )
 
 func TestDraftValidationUnitExponentOverflow(t *testing.T) {

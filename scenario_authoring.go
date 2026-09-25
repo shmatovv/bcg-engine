@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"sort"
 
-	domainscenario "github.com/shmatovv/bcg-engine/internal/domain/scenario"
-	modelscenario "github.com/shmatovv/bcg-engine/internal/scenario"
+	domainscenario "github.com/shmatovv/bcg-engine/v2/internal/domain/scenario"
+	modelscenario "github.com/shmatovv/bcg-engine/v2/internal/scenario"
 )
 
 // ScenarioOverrideSpec describes one immutable Scenario value difference. A

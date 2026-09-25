@@ -1,8 +1,8 @@
 package bcg
 
 import (
-	domainrule "github.com/shmatovv/bcg-engine/internal/domain/rule"
-	ruleeval "github.com/shmatovv/bcg-engine/internal/rule/eval"
+	domainrule "github.com/shmatovv/bcg-engine/v2/internal/domain/rule"
+	ruleeval "github.com/shmatovv/bcg-engine/v2/internal/rule/eval"
 )
 
 // RuleState is the semantic state of a declarative named applicability decision.

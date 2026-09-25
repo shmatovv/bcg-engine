@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/shmatovv/bcg-engine/internal/domain/identity"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/identity"
 )
 
 type ValidationIssueKind uint16

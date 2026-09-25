@@ -1,8 +1,8 @@
 package check
 
 import (
-	"github.com/shmatovv/bcg-engine/internal/domain/constraint"
-	"github.com/shmatovv/bcg-engine/internal/evaluator"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/constraint"
+	"github.com/shmatovv/bcg-engine/v2/internal/evaluator"
 )
 
 // Result is one immutable Constraint evaluation, including only the

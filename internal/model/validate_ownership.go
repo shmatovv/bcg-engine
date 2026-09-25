@@ -3,8 +3,8 @@ package model
 import (
 	"fmt"
 
-	"github.com/shmatovv/bcg-engine/internal/domain/identity"
-	"github.com/shmatovv/bcg-engine/internal/domain/schema"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/identity"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/schema"
 )
 
 // validateOwnership verifies the bidirectional ownership relationship

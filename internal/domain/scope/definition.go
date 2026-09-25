@@ -3,8 +3,8 @@ package scope
 import (
 	"fmt"
 
-	"github.com/shmatovv/bcg-engine/internal/domain/identity"
-	"github.com/shmatovv/bcg-engine/internal/types/value"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/identity"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/value"
 )
 
 // Definition declares one independent scope dimension used during value

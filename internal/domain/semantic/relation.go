@@ -3,8 +3,8 @@ package semantic
 import (
 	"fmt"
 
-	"github.com/shmatovv/bcg-engine/internal/domain/identity"
-	"github.com/shmatovv/bcg-engine/internal/expression/ast"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/identity"
+	"github.com/shmatovv/bcg-engine/v2/internal/expression/ast"
 )
 
 // Relation is a directed semantic edge between two Entities.

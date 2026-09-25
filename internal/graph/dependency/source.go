@@ -1,9 +1,9 @@
 package dependency
 
 import (
-	"github.com/shmatovv/bcg-engine/internal/domain/identity"
-	"github.com/shmatovv/bcg-engine/internal/domain/schema"
-	"github.com/shmatovv/bcg-engine/internal/domain/semantic"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/identity"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/schema"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/semantic"
 )
 
 // Source exposes the immutable model data required to build a concrete

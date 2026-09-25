@@ -3,11 +3,11 @@ package runtime
 import (
 	"sort"
 
-	"github.com/shmatovv/bcg-engine/internal/domain/address"
-	"github.com/shmatovv/bcg-engine/internal/domain/identity"
-	domainscenario "github.com/shmatovv/bcg-engine/internal/domain/scenario"
-	"github.com/shmatovv/bcg-engine/internal/domain/scope"
-	domaintime "github.com/shmatovv/bcg-engine/internal/domain/time"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/address"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/identity"
+	domainscenario "github.com/shmatovv/bcg-engine/v2/internal/domain/scenario"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/scope"
+	domaintime "github.com/shmatovv/bcg-engine/v2/internal/domain/time"
 )
 
 // CalculationContext contains transient runtime dimensions that influence one

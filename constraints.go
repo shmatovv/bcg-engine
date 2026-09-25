@@ -1,9 +1,9 @@
 package bcg
 
 import (
-	constraintcheck "github.com/shmatovv/bcg-engine/internal/constraint/check"
-	"github.com/shmatovv/bcg-engine/internal/constraint/feasibility"
-	"github.com/shmatovv/bcg-engine/internal/domain/constraint"
+	constraintcheck "github.com/shmatovv/bcg-engine/v2/internal/constraint/check"
+	"github.com/shmatovv/bcg-engine/v2/internal/constraint/feasibility"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/constraint"
 )
 
 // ConstraintState is the semantic outcome of a declarative Constraint.

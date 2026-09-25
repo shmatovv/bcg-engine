@@ -1,8 +1,8 @@
 package runtime
 
 import (
-	"github.com/shmatovv/bcg-engine/internal/domain/address"
-	"github.com/shmatovv/bcg-engine/internal/domain/semantic"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/address"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/semantic"
 )
 
 // Override is a calculation-local value override for one concrete property.

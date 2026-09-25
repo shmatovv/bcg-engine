@@ -1,7 +1,7 @@
 package time
 
 import (
-	"github.com/shmatovv/bcg-engine/internal/types/datetime"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/datetime"
 )
 
 type EffectivePeriod struct {

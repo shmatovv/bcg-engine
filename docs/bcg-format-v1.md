@@ -1,5 +1,11 @@
 # BCG portable model format v1
 
+This document describes the retained v1 wire contract. BCG Engine v2 is
+imported as `github.com/shmatovv/bcg-engine/v2`, but in the Phase 0/1 baseline
+it still reads and writes this `.bcg v1` format (`formatVersion: 1`,
+`engineCompatibility: bcg-engine-v1`) without semantic or wire changes.
+`.bcg v2` is intentionally not implemented yet.
+
 `.bcg` v1 is a canonical UTF-8 JSON representation of one committed logical
 BCG model snapshot and optional value-only Scenario overlays. It is designed
 for files, databases, object storage, and messages; the codec itself only

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/shmatovv/bcg-engine/internal/domain/constraint"
-	domainrule "github.com/shmatovv/bcg-engine/internal/domain/rule"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/constraint"
+	domainrule "github.com/shmatovv/bcg-engine/v2/internal/domain/rule"
 )
 
 // IsValid reports whether s is a BCG v1 Constraint severity.

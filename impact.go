@@ -1,6 +1,6 @@
 package bcg
 
-import "github.com/shmatovv/bcg-engine/internal/impact"
+import "github.com/shmatovv/bcg-engine/v2/internal/impact"
 
 // ImpactMode selects structural, effective, or actually observed dependency semantics.
 type ImpactMode string

@@ -10,9 +10,9 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/shmatovv/bcg-engine/internal/domain/scenario"
-	"github.com/shmatovv/bcg-engine/internal/model"
-	modelscenario "github.com/shmatovv/bcg-engine/internal/scenario"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/scenario"
+	"github.com/shmatovv/bcg-engine/v2/internal/model"
+	modelscenario "github.com/shmatovv/bcg-engine/v2/internal/scenario"
 )
 
 const (

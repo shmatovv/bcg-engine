@@ -1,8 +1,8 @@
 package value
 
 import (
-	"github.com/shmatovv/bcg-engine/internal/types/datetime"
-	enginevalue "github.com/shmatovv/bcg-engine/internal/types/value"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/datetime"
+	enginevalue "github.com/shmatovv/bcg-engine/v2/internal/types/value"
 )
 
 // ResolutionKind identifies the temporal shape returned by Resolve.

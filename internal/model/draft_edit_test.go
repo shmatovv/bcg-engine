@@ -3,9 +3,9 @@ package model
 import (
 	"testing"
 
-	"github.com/shmatovv/bcg-engine/internal/domain/identity"
-	"github.com/shmatovv/bcg-engine/internal/domain/schema"
-	"github.com/shmatovv/bcg-engine/internal/types/precision"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/identity"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/schema"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/precision"
 )
 
 func TestNewDraftFromVersionCopiesContentForReplacementAndRemoval(t *testing.T) {

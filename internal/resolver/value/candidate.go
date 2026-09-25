@@ -1,13 +1,13 @@
 package value
 
 import (
-	domainscenario "github.com/shmatovv/bcg-engine/internal/domain/scenario"
-	"github.com/shmatovv/bcg-engine/internal/domain/scope"
-	"github.com/shmatovv/bcg-engine/internal/domain/semantic"
-	resolverscope "github.com/shmatovv/bcg-engine/internal/resolver/scope"
-	resolvertime "github.com/shmatovv/bcg-engine/internal/resolver/time"
-	"github.com/shmatovv/bcg-engine/internal/types/datetime"
-	enginevalue "github.com/shmatovv/bcg-engine/internal/types/value"
+	domainscenario "github.com/shmatovv/bcg-engine/v2/internal/domain/scenario"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/scope"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/semantic"
+	resolverscope "github.com/shmatovv/bcg-engine/v2/internal/resolver/scope"
+	resolvertime "github.com/shmatovv/bcg-engine/v2/internal/resolver/time"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/datetime"
+	enginevalue "github.com/shmatovv/bcg-engine/v2/internal/types/value"
 )
 
 type candidate struct {

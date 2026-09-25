@@ -1,6 +1,6 @@
 package typecheck
 
-import "github.com/shmatovv/bcg-engine/internal/types/value"
+import "github.com/shmatovv/bcg-engine/v2/internal/types/value"
 
 // IsNumeric reports whether t belongs to the numeric domain supported
 // by arithmetic expressions.

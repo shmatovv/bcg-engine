@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/shmatovv/bcg-engine/internal/domain/schema"
-	internalrational "github.com/shmatovv/bcg-engine/internal/types/rational"
-	internalunit "github.com/shmatovv/bcg-engine/internal/types/unit"
-	internalvalue "github.com/shmatovv/bcg-engine/internal/types/value"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/schema"
+	internalrational "github.com/shmatovv/bcg-engine/v2/internal/types/rational"
+	internalunit "github.com/shmatovv/bcg-engine/v2/internal/types/unit"
+	internalvalue "github.com/shmatovv/bcg-engine/v2/internal/types/value"
 )
 
 // ValueType describes the scalar type that later schema authoring assigns to

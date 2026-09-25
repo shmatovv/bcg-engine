@@ -4,17 +4,17 @@ import (
 	"fmt"
 	"sort"
 
-	constraintcheck "github.com/shmatovv/bcg-engine/internal/constraint/check"
-	"github.com/shmatovv/bcg-engine/internal/constraint/feasibility"
-	"github.com/shmatovv/bcg-engine/internal/domain/address"
-	"github.com/shmatovv/bcg-engine/internal/domain/identity"
-	"github.com/shmatovv/bcg-engine/internal/domain/schema"
-	"github.com/shmatovv/bcg-engine/internal/evaluator"
-	"github.com/shmatovv/bcg-engine/internal/impact"
-	"github.com/shmatovv/bcg-engine/internal/model"
-	resolvervalue "github.com/shmatovv/bcg-engine/internal/resolver/value"
-	ruleeval "github.com/shmatovv/bcg-engine/internal/rule/eval"
-	"github.com/shmatovv/bcg-engine/internal/runtime"
+	constraintcheck "github.com/shmatovv/bcg-engine/v2/internal/constraint/check"
+	"github.com/shmatovv/bcg-engine/v2/internal/constraint/feasibility"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/address"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/identity"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/schema"
+	"github.com/shmatovv/bcg-engine/v2/internal/evaluator"
+	"github.com/shmatovv/bcg-engine/v2/internal/impact"
+	"github.com/shmatovv/bcg-engine/v2/internal/model"
+	resolvervalue "github.com/shmatovv/bcg-engine/v2/internal/resolver/value"
+	ruleeval "github.com/shmatovv/bcg-engine/v2/internal/rule/eval"
+	"github.com/shmatovv/bcg-engine/v2/internal/runtime"
 )
 
 // Model identifies one logical calculation model and, when committed, one
@@ -478,14 +478,75 @@ func (m Model) ValueBindings() []ValueBinding {
 // EntityTypes returns deterministic named schema descriptors.
 func (m Model) EntityTypes() []NamedInfo { return namedEntityTypes(m) }
 
+// EntityTypeDefinitions returns complete immutable EntityType declarations in
+// deterministic ID order. It is the lossless counterpart to EntityTypes.
+func (m Model) EntityTypeDefinitions() []EntityType {
+	if !m.IsValid() {
+		return nil
+	}
+	items := m.version.EntityTypes()
+	result := make([]EntityType, len(items))
+	for i, item := range items {
+		result[i] = EntityType{value: item}
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].ID().String() < result[j].ID().String() })
+	return result
+}
+
 // RelationTypes returns deterministic named schema descriptors.
 func (m Model) RelationTypes() []NamedInfo { return namedRelationTypes(m) }
+
+// RelationTypeDefinitions returns complete immutable RelationType declarations
+// in deterministic ID order. It is the lossless counterpart to RelationTypes.
+func (m Model) RelationTypeDefinitions() []RelationType {
+	if !m.IsValid() {
+		return nil
+	}
+	items := m.version.RelationTypes()
+	result := make([]RelationType, len(items))
+	for i, item := range items {
+		result[i] = RelationType{value: item}
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].ID().String() < result[j].ID().String() })
+	return result
+}
 
 // Traits returns deterministic named schema descriptors.
 func (m Model) Traits() []NamedInfo { return namedTraits(m) }
 
+// TraitDefinitions returns complete immutable Trait declarations in
+// deterministic ID order. It is the lossless counterpart to Traits.
+func (m Model) TraitDefinitions() []Trait {
+	if !m.IsValid() {
+		return nil
+	}
+	items := m.version.Traits()
+	result := make([]Trait, len(items))
+	for i, item := range items {
+		result[i] = Trait{value: item}
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].ID().String() < result[j].ID().String() })
+	return result
+}
+
 // PropertyContracts returns deterministic named schema descriptors.
 func (m Model) PropertyContracts() []NamedInfo { return namedContracts(m) }
+
+// PropertyContractDefinitions returns complete immutable PropertyContract
+// declarations in deterministic ID order. It is the lossless counterpart to
+// PropertyContracts.
+func (m Model) PropertyContractDefinitions() []PropertyContract {
+	if !m.IsValid() {
+		return nil
+	}
+	items := m.version.PropertyContracts()
+	result := make([]PropertyContract, len(items))
+	for i, item := range items {
+		result[i] = PropertyContract{value: item}
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].ID().String() < result[j].ID().String() })
+	return result
+}
 
 // ScopeDefinitionInfo is one scope dimension and the type of its selected Value.
 type ScopeDefinitionInfo struct {
@@ -510,6 +571,21 @@ func (s ScopeDefinitionInfo) Schema() ScopeDefinition { return s.definition }
 // ScopeDefinitions returns deterministic scope-dimension descriptors.
 func (m Model) ScopeDefinitions() []ScopeDefinitionInfo { return scopeInfos(m) }
 
+// ScopeDefinitionDeclarations returns complete immutable ScopeDefinition
+// declarations in deterministic ID order.
+func (m Model) ScopeDefinitionDeclarations() []ScopeDefinition {
+	if !m.IsValid() {
+		return nil
+	}
+	items := m.version.ScopeDefinitions()
+	result := make([]ScopeDefinition, len(items))
+	for i, item := range items {
+		result[i] = ScopeDefinition{value: item}
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].ID().String() < result[j].ID().String() })
+	return result
+}
+
 // PropertyDefinitions returns deterministic read-only property descriptors.
 func (m Model) PropertyDefinitions() []PropertyInfo {
 	if !m.IsValid() {
@@ -521,6 +597,23 @@ func (m Model) PropertyDefinitions() []PropertyInfo {
 		result[index] = propertyInfo(item)
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].id.String() < result[j].id.String() })
+	return result
+}
+
+// PropertyDefinitionDeclarations returns complete immutable property
+// declarations in deterministic ID order. It is convenient when rebuilding a
+// model directly from public declarations rather than the compact PropertyInfo
+// view retained for compatibility.
+func (m Model) PropertyDefinitionDeclarations() []PropertyDefinition {
+	if !m.IsValid() {
+		return nil
+	}
+	items := m.version.PropertyDefinitions()
+	result := make([]PropertyDefinition, len(items))
+	for i, item := range items {
+		result[i] = PropertyDefinition{value: item}
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].ID().String() < result[j].ID().String() })
 	return result
 }
 

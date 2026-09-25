@@ -4,14 +4,14 @@ import (
 	"fmt"
 	"sync"
 
-	constraintcheck "github.com/shmatovv/bcg-engine/internal/constraint/check"
-	"github.com/shmatovv/bcg-engine/internal/constraint/feasibility"
-	"github.com/shmatovv/bcg-engine/internal/domain/address"
-	"github.com/shmatovv/bcg-engine/internal/evaluator"
-	"github.com/shmatovv/bcg-engine/internal/impact"
-	resolvervalue "github.com/shmatovv/bcg-engine/internal/resolver/value"
-	ruleeval "github.com/shmatovv/bcg-engine/internal/rule/eval"
-	"github.com/shmatovv/bcg-engine/internal/runtime"
+	constraintcheck "github.com/shmatovv/bcg-engine/v2/internal/constraint/check"
+	"github.com/shmatovv/bcg-engine/v2/internal/constraint/feasibility"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/address"
+	"github.com/shmatovv/bcg-engine/v2/internal/evaluator"
+	"github.com/shmatovv/bcg-engine/v2/internal/impact"
+	resolvervalue "github.com/shmatovv/bcg-engine/v2/internal/resolver/value"
+	ruleeval "github.com/shmatovv/bcg-engine/v2/internal/rule/eval"
+	"github.com/shmatovv/bcg-engine/v2/internal/runtime"
 )
 
 // Session owns reusable incremental scalar evaluation state for one immutable

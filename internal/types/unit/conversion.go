@@ -3,9 +3,9 @@ package unit
 import (
 	"fmt"
 
-	"github.com/shmatovv/bcg-engine/internal/types/decimal"
-	"github.com/shmatovv/bcg-engine/internal/types/precision"
-	"github.com/shmatovv/bcg-engine/internal/types/rational"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/decimal"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/precision"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/rational"
 )
 
 // Convert converts value expressed in from into the equivalent value

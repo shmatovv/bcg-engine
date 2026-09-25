@@ -4,14 +4,14 @@ import (
 	"errors"
 	"sort"
 
-	"github.com/shmatovv/bcg-engine/internal/domain/address"
-	"github.com/shmatovv/bcg-engine/internal/domain/schema"
-	"github.com/shmatovv/bcg-engine/internal/domain/semantic"
-	domaintime "github.com/shmatovv/bcg-engine/internal/domain/time"
-	"github.com/shmatovv/bcg-engine/internal/runtime"
-	"github.com/shmatovv/bcg-engine/internal/types/datetime"
-	"github.com/shmatovv/bcg-engine/internal/types/series"
-	"github.com/shmatovv/bcg-engine/internal/types/unit"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/address"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/schema"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/semantic"
+	domaintime "github.com/shmatovv/bcg-engine/v2/internal/domain/time"
+	"github.com/shmatovv/bcg-engine/v2/internal/runtime"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/datetime"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/series"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/unit"
 )
 
 // Resolve resolves one Input PropertyDefinition for the supplied committed

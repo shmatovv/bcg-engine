@@ -1,7 +1,7 @@
 package model
 
 import (
-	"github.com/shmatovv/bcg-engine/internal/types/value"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/value"
 )
 
 // validateSchemaSemantics checks schema combinations that are structurally

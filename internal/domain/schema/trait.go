@@ -3,7 +3,7 @@ package schema
 import (
 	"fmt"
 
-	"github.com/shmatovv/bcg-engine/internal/domain/identity"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/identity"
 )
 
 // Trait defines a reusable schema contract.

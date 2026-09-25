@@ -4,13 +4,13 @@ import (
 	"errors"
 	"fmt"
 
-	constraintcheck "github.com/shmatovv/bcg-engine/internal/constraint/check"
-	"github.com/shmatovv/bcg-engine/internal/evaluator"
-	formatbcg "github.com/shmatovv/bcg-engine/internal/format/bcg"
-	"github.com/shmatovv/bcg-engine/internal/impact"
-	"github.com/shmatovv/bcg-engine/internal/model"
-	resolvervalue "github.com/shmatovv/bcg-engine/internal/resolver/value"
-	ruleeval "github.com/shmatovv/bcg-engine/internal/rule/eval"
+	constraintcheck "github.com/shmatovv/bcg-engine/v2/internal/constraint/check"
+	"github.com/shmatovv/bcg-engine/v2/internal/evaluator"
+	formatbcg "github.com/shmatovv/bcg-engine/v2/internal/format/bcg"
+	"github.com/shmatovv/bcg-engine/v2/internal/impact"
+	"github.com/shmatovv/bcg-engine/v2/internal/model"
+	resolvervalue "github.com/shmatovv/bcg-engine/v2/internal/resolver/value"
+	ruleeval "github.com/shmatovv/bcg-engine/v2/internal/rule/eval"
 )
 
 var (

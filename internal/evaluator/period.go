@@ -3,18 +3,18 @@ package evaluator
 import (
 	"sort"
 
-	"github.com/shmatovv/bcg-engine/internal/domain/address"
-	"github.com/shmatovv/bcg-engine/internal/domain/identity"
-	domainscenario "github.com/shmatovv/bcg-engine/internal/domain/scenario"
-	"github.com/shmatovv/bcg-engine/internal/domain/schema"
-	"github.com/shmatovv/bcg-engine/internal/domain/semantic"
-	domaintime "github.com/shmatovv/bcg-engine/internal/domain/time"
-	"github.com/shmatovv/bcg-engine/internal/graph/dependency"
-	"github.com/shmatovv/bcg-engine/internal/model"
-	resolverscope "github.com/shmatovv/bcg-engine/internal/resolver/scope"
-	resolvervalue "github.com/shmatovv/bcg-engine/internal/resolver/value"
-	"github.com/shmatovv/bcg-engine/internal/runtime"
-	"github.com/shmatovv/bcg-engine/internal/types/datetime"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/address"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/identity"
+	domainscenario "github.com/shmatovv/bcg-engine/v2/internal/domain/scenario"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/schema"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/semantic"
+	domaintime "github.com/shmatovv/bcg-engine/v2/internal/domain/time"
+	"github.com/shmatovv/bcg-engine/v2/internal/graph/dependency"
+	"github.com/shmatovv/bcg-engine/v2/internal/model"
+	resolverscope "github.com/shmatovv/bcg-engine/v2/internal/resolver/scope"
+	resolvervalue "github.com/shmatovv/bcg-engine/v2/internal/resolver/value"
+	"github.com/shmatovv/bcg-engine/v2/internal/runtime"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/datetime"
 )
 
 // PeriodSegment is one finite half-open [from, to) interval evaluated with

@@ -9,7 +9,7 @@ import (
 	"sync"
 	"testing"
 
-	bcg "github.com/shmatovv/bcg-engine"
+	bcg "github.com/shmatovv/bcg-engine/v2"
 )
 
 // This fixture is deliberately plain v1 JSON. The external test package uses

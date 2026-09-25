@@ -1,10 +1,10 @@
 package typecheck
 
 import (
-	"github.com/shmatovv/bcg-engine/internal/expression/ast"
-	"github.com/shmatovv/bcg-engine/internal/expression/typing"
-	"github.com/shmatovv/bcg-engine/internal/types/unit"
-	"github.com/shmatovv/bcg-engine/internal/types/value"
+	"github.com/shmatovv/bcg-engine/v2/internal/expression/ast"
+	"github.com/shmatovv/bcg-engine/v2/internal/expression/typing"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/unit"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/value"
 )
 
 // ArithmeticErrorKind identifies why arithmetic type inference failed.

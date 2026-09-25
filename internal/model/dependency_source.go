@@ -1,10 +1,10 @@
 package model
 
 import (
-	"github.com/shmatovv/bcg-engine/internal/domain/identity"
-	"github.com/shmatovv/bcg-engine/internal/domain/schema"
-	"github.com/shmatovv/bcg-engine/internal/domain/semantic"
-	"github.com/shmatovv/bcg-engine/internal/graph/dependency"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/identity"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/schema"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/semantic"
+	"github.com/shmatovv/bcg-engine/v2/internal/graph/dependency"
 )
 
 // draftDependencySource adapts a Draft to dependency.Source.

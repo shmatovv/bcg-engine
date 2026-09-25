@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/shmatovv/bcg-engine/internal/types/date"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/date"
 )
 
 const (

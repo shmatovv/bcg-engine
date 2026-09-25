@@ -4,11 +4,11 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/shmatovv/bcg-engine/internal/expression/typecheck"
-	"github.com/shmatovv/bcg-engine/internal/expression/typing"
-	"github.com/shmatovv/bcg-engine/internal/types/rational"
-	"github.com/shmatovv/bcg-engine/internal/types/unit"
-	"github.com/shmatovv/bcg-engine/internal/types/value"
+	"github.com/shmatovv/bcg-engine/v2/internal/expression/typecheck"
+	"github.com/shmatovv/bcg-engine/v2/internal/expression/typing"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/rational"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/unit"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/value"
 )
 
 func TestInferNegatePreservesNumericType(t *testing.T) {

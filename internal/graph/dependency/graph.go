@@ -3,8 +3,8 @@ package dependency
 import (
 	"sort"
 
-	"github.com/shmatovv/bcg-engine/internal/domain/address"
-	"github.com/shmatovv/bcg-engine/internal/domain/identity"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/address"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/identity"
 )
 
 // Edge points from the property being read to the property whose expression

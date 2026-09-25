@@ -3,7 +3,7 @@ package model
 import (
 	"fmt"
 
-	"github.com/shmatovv/bcg-engine/internal/domain/identity"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/identity"
 )
 
 // Model is the long-lived identity of one business model.

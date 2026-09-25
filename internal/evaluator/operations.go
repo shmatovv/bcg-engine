@@ -3,12 +3,12 @@ package evaluator
 import (
 	"math/big"
 
-	"github.com/shmatovv/bcg-engine/internal/expression/ast"
-	"github.com/shmatovv/bcg-engine/internal/expression/typecheck"
-	"github.com/shmatovv/bcg-engine/internal/types/decimal"
-	"github.com/shmatovv/bcg-engine/internal/types/rational"
-	"github.com/shmatovv/bcg-engine/internal/types/unit"
-	enginevalue "github.com/shmatovv/bcg-engine/internal/types/value"
+	"github.com/shmatovv/bcg-engine/v2/internal/expression/ast"
+	"github.com/shmatovv/bcg-engine/v2/internal/expression/typecheck"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/decimal"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/rational"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/unit"
+	enginevalue "github.com/shmatovv/bcg-engine/v2/internal/types/value"
 )
 
 func (s *evaluationState) evaluateArithmetic(

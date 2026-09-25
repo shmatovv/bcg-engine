@@ -3,8 +3,8 @@ package constraint
 import (
 	"fmt"
 
-	"github.com/shmatovv/bcg-engine/internal/domain/identity"
-	"github.com/shmatovv/bcg-engine/internal/expression/ast"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/identity"
+	"github.com/shmatovv/bcg-engine/v2/internal/expression/ast"
 )
 
 // Constraint is an immutable declarative business assertion.

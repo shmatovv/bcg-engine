@@ -1,8 +1,8 @@
 package bcg
 
 import (
-	"github.com/shmatovv/bcg-engine/internal/evaluator"
-	enginevalue "github.com/shmatovv/bcg-engine/internal/types/value"
+	"github.com/shmatovv/bcg-engine/v2/internal/evaluator"
+	enginevalue "github.com/shmatovv/bcg-engine/v2/internal/types/value"
 )
 
 // ResultState is the semantic state of a scalar evaluation.

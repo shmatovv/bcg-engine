@@ -3,11 +3,11 @@ package evaluator
 import (
 	"sort"
 
-	"github.com/shmatovv/bcg-engine/internal/provenance"
-	"github.com/shmatovv/bcg-engine/internal/types/datetime"
-	"github.com/shmatovv/bcg-engine/internal/types/series"
-	"github.com/shmatovv/bcg-engine/internal/types/unit"
-	enginevalue "github.com/shmatovv/bcg-engine/internal/types/value"
+	"github.com/shmatovv/bcg-engine/v2/internal/provenance"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/datetime"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/series"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/unit"
+	enginevalue "github.com/shmatovv/bcg-engine/v2/internal/types/value"
 )
 
 // seriesDemand identifies samples by their temporal coordinate, never by an

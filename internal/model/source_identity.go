@@ -1,6 +1,6 @@
 package model
 
-import "github.com/shmatovv/bcg-engine/internal/domain/identity"
+import "github.com/shmatovv/bcg-engine/v2/internal/domain/identity"
 
 // EffectiveSourceIdentity identifies the immutable semantic graph used by a
 // runtime evaluation. A model-only source has no DatasetID; a combined source

@@ -4,12 +4,12 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/shmatovv/bcg-engine/internal/domain/address"
-	"github.com/shmatovv/bcg-engine/internal/expression/ast"
-	"github.com/shmatovv/bcg-engine/internal/graph/dependency"
-	"github.com/shmatovv/bcg-engine/internal/model"
-	"github.com/shmatovv/bcg-engine/internal/plan"
-	"github.com/shmatovv/bcg-engine/internal/runtime"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/address"
+	"github.com/shmatovv/bcg-engine/v2/internal/expression/ast"
+	"github.com/shmatovv/bcg-engine/v2/internal/graph/dependency"
+	"github.com/shmatovv/bcg-engine/v2/internal/model"
+	"github.com/shmatovv/bcg-engine/v2/internal/plan"
+	"github.com/shmatovv/bcg-engine/v2/internal/runtime"
 )
 
 // Session owns reusable in-process scalar evaluation state for exactly one

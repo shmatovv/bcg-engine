@@ -1,13 +1,13 @@
 package model
 
 import (
-	"github.com/shmatovv/bcg-engine/internal/domain/constraint"
-	"github.com/shmatovv/bcg-engine/internal/domain/identity"
-	"github.com/shmatovv/bcg-engine/internal/domain/rule"
-	"github.com/shmatovv/bcg-engine/internal/domain/schema"
-	"github.com/shmatovv/bcg-engine/internal/domain/scope"
-	"github.com/shmatovv/bcg-engine/internal/domain/semantic"
-	"github.com/shmatovv/bcg-engine/internal/types/precision"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/constraint"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/identity"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/rule"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/schema"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/scope"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/semantic"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/precision"
 )
 
 type ModelVersion struct {

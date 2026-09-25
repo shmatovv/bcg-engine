@@ -3,7 +3,7 @@ package ast
 import (
 	"testing"
 
-	"github.com/shmatovv/bcg-engine/internal/types/value"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/value"
 )
 
 func TestDepthIsIterativeForDeepExpression(t *testing.T) {

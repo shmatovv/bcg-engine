@@ -3,9 +3,9 @@ package schema
 import (
 	"fmt"
 
-	"github.com/shmatovv/bcg-engine/internal/domain/identity"
-	"github.com/shmatovv/bcg-engine/internal/types/unit"
-	"github.com/shmatovv/bcg-engine/internal/types/value"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/identity"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/unit"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/value"
 )
 
 // TemporalMode defines how values of a property are represented over time.

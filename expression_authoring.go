@@ -3,9 +3,9 @@ package bcg
 import (
 	"fmt"
 
-	"github.com/shmatovv/bcg-engine/internal/domain/address"
-	"github.com/shmatovv/bcg-engine/internal/domain/identity"
-	"github.com/shmatovv/bcg-engine/internal/expression/ast"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/address"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/identity"
+	"github.com/shmatovv/bcg-engine/v2/internal/expression/ast"
 )
 
 // MaxExpressionDepth is the maximum nesting accepted by BCG v1. Builders may
@@ -20,6 +20,458 @@ const MaxExpressionDepth = ast.MaxExpressionDepth
 // PropertyDefinitionSpec or retained while editing a Draft. It never exposes
 // internal AST nodes or mutable children.
 type Expression struct{ value ast.Expression }
+
+// ExpressionKind identifies the concrete immutable AST node held by an
+// Expression. The zero value is invalid.
+type ExpressionKind uint16
+
+const (
+	ExpressionConstant ExpressionKind = iota + 1
+	ExpressionSelfPropertyReference
+	ExpressionAbsolutePropertyReference
+	ExpressionBoundPropertyReference
+	ExpressionBoundContractPropertyReference
+	ExpressionArithmetic
+	ExpressionNegate
+	ExpressionComparison
+	ExpressionLogical
+	ExpressionNot
+	ExpressionIf
+	ExpressionIsNull
+	ExpressionCoalesce
+	ExpressionAggregate
+)
+
+// IsValid reports whether k identifies a supported v1 expression node.
+func (k ExpressionKind) IsValid() bool {
+	return k >= ExpressionConstant && k <= ExpressionAggregate
+}
+
+// String returns the stable node name, or "Invalid".
+func (k ExpressionKind) String() string {
+	switch k {
+	case ExpressionConstant:
+		return "Constant"
+	case ExpressionSelfPropertyReference:
+		return "SelfPropertyReference"
+	case ExpressionAbsolutePropertyReference:
+		return "AbsolutePropertyReference"
+	case ExpressionBoundPropertyReference:
+		return "BoundPropertyReference"
+	case ExpressionBoundContractPropertyReference:
+		return "BoundContractPropertyReference"
+	case ExpressionArithmetic:
+		return "Arithmetic"
+	case ExpressionNegate:
+		return "Negate"
+	case ExpressionComparison:
+		return "Comparison"
+	case ExpressionLogical:
+		return "Logical"
+	case ExpressionNot:
+		return "Not"
+	case ExpressionIf:
+		return "If"
+	case ExpressionIsNull:
+		return "IsNull"
+	case ExpressionCoalesce:
+		return "Coalesce"
+	case ExpressionAggregate:
+		return "Aggregate"
+	default:
+		return "Invalid"
+	}
+}
+
+// Kind reports e's concrete AST node kind, or an invalid value for a zero or
+// malformed expression.
+func (e Expression) Kind() ExpressionKind {
+	if !e.IsValid() {
+		return 0
+	}
+	switch e.value.(type) {
+	case ast.Constant:
+		return ExpressionConstant
+	case ast.SelfPropertyReference:
+		return ExpressionSelfPropertyReference
+	case ast.AbsolutePropertyReference:
+		return ExpressionAbsolutePropertyReference
+	case ast.BoundPropertyDefinitionReference:
+		return ExpressionBoundPropertyReference
+	case ast.BoundContractPropertyReference:
+		return ExpressionBoundContractPropertyReference
+	case ast.Arithmetic:
+		return ExpressionArithmetic
+	case ast.Negate:
+		return ExpressionNegate
+	case ast.Comparison:
+		return ExpressionComparison
+	case ast.Logical:
+		return ExpressionLogical
+	case ast.Not:
+		return ExpressionNot
+	case ast.If:
+		return ExpressionIf
+	case ast.IsNull:
+		return ExpressionIsNull
+	case ast.Coalesce:
+		return ExpressionCoalesce
+	case ast.Aggregate:
+		return ExpressionAggregate
+	default:
+		return 0
+	}
+}
+
+// Children returns e's direct expression children in deterministic semantic
+// order. Aggregate children are filter (when present), then map (when
+// present). The returned slice is owned by the caller.
+func (e Expression) Children() []Expression {
+	if !e.IsValid() {
+		return nil
+	}
+	var nodes []ast.Expression
+	switch node := e.value.(type) {
+	case ast.Arithmetic:
+		nodes = []ast.Expression{node.Left(), node.Right()}
+	case ast.Negate:
+		nodes = []ast.Expression{node.Operand()}
+	case ast.Comparison:
+		nodes = []ast.Expression{node.Left(), node.Right()}
+	case ast.Logical:
+		nodes = []ast.Expression{node.Left(), node.Right()}
+	case ast.Not:
+		nodes = []ast.Expression{node.Operand()}
+	case ast.If:
+		nodes = []ast.Expression{node.Condition(), node.Then(), node.Else()}
+	case ast.IsNull:
+		nodes = []ast.Expression{node.Operand()}
+	case ast.Coalesce:
+		nodes = []ast.Expression{node.Primary(), node.Fallback()}
+	case ast.Aggregate:
+		if filter, ok := node.Filter(); ok {
+			nodes = append(nodes, filter)
+		}
+		if mapped, ok := node.Map(); ok {
+			nodes = append(nodes, mapped)
+		}
+	}
+	result := make([]Expression, len(nodes))
+	for i, node := range nodes {
+		result[i] = expressionFromInternal(node)
+	}
+	return result
+}
+
+// ConstantValue returns the literal value for a constant expression.
+func (e Expression) ConstantValue() (Value, bool) {
+	node, ok := e.value.(ast.Constant)
+	if !ok || !e.IsValid() {
+		return Value{}, false
+	}
+	return valueFromInternal(node.Value()), true
+}
+
+// PropertyReferenceKind identifies a property-reference node shape.
+type PropertyReferenceKind uint8
+
+const (
+	PropertyReferenceSelf PropertyReferenceKind = iota + 1
+	PropertyReferenceAbsolute
+	PropertyReferenceBoundDefinition
+	PropertyReferenceBoundContract
+)
+
+// PropertyReference is the typed, immutable description of a property
+// reference. Exactly the accessor documented for its Kind returns data.
+type PropertyReference struct {
+	kind       PropertyReferenceKind
+	definition ID
+	contract   ID
+	address    PropertyAddress
+	binding    AggregateBinding
+}
+
+func (r PropertyReference) Kind() PropertyReferenceKind { return r.kind }
+func (r PropertyReference) DefinitionID() (ID, bool) {
+	return r.definition, r.kind == PropertyReferenceSelf || r.kind == PropertyReferenceBoundDefinition
+}
+func (r PropertyReference) ContractID() (ID, bool) {
+	return r.contract, r.kind == PropertyReferenceBoundContract
+}
+func (r PropertyReference) Address() (PropertyAddress, bool) {
+	return r.address, r.kind == PropertyReferenceAbsolute
+}
+func (r PropertyReference) Binding() (AggregateBinding, bool) {
+	return r.binding, r.kind == PropertyReferenceBoundDefinition || r.kind == PropertyReferenceBoundContract
+}
+
+// PropertyReference returns e's typed property-reference data.
+func (e Expression) PropertyReference() (PropertyReference, bool) {
+	if !e.IsValid() {
+		return PropertyReference{}, false
+	}
+	switch node := e.value.(type) {
+	case ast.SelfPropertyReference:
+		return PropertyReference{kind: PropertyReferenceSelf, definition: idFromInternal(node.DefinitionID())}, true
+	case ast.AbsolutePropertyReference:
+		return PropertyReference{kind: PropertyReferenceAbsolute, address: addressFromInternal(node.Address())}, true
+	case ast.BoundPropertyDefinitionReference:
+		return PropertyReference{kind: PropertyReferenceBoundDefinition, definition: idFromInternal(node.DefinitionID()), binding: aggregateBindingFromInternal(node.Target())}, true
+	case ast.BoundContractPropertyReference:
+		return PropertyReference{kind: PropertyReferenceBoundContract, contract: idFromInternal(node.ContractID()), binding: aggregateBindingFromInternal(node.Target())}, true
+	default:
+		return PropertyReference{}, false
+	}
+}
+
+// UnaryOperationKind identifies a v1 unary operation.
+type UnaryOperationKind uint8
+
+const (
+	UnaryNegate UnaryOperationKind = iota + 1
+	UnaryNot
+	UnaryIsNull
+)
+
+// UnaryExpression describes one immutable unary operation.
+type UnaryExpression struct {
+	kind    UnaryOperationKind
+	operand Expression
+}
+
+func (o UnaryExpression) Kind() UnaryOperationKind { return o.kind }
+func (o UnaryExpression) Operand() Expression      { return o.operand }
+
+// UnaryOperation returns e's typed unary operation data.
+func (e Expression) UnaryOperation() (UnaryExpression, bool) {
+	if !e.IsValid() {
+		return UnaryExpression{}, false
+	}
+	switch node := e.value.(type) {
+	case ast.Negate:
+		return UnaryExpression{kind: UnaryNegate, operand: expressionFromInternal(node.Operand())}, true
+	case ast.Not:
+		return UnaryExpression{kind: UnaryNot, operand: expressionFromInternal(node.Operand())}, true
+	case ast.IsNull:
+		return UnaryExpression{kind: UnaryIsNull, operand: expressionFromInternal(node.Operand())}, true
+	default:
+		return UnaryExpression{}, false
+	}
+}
+
+// BinaryOperationKind identifies a v1 arithmetic, comparison, or logical
+// binary operation.
+type BinaryOperationKind uint8
+
+const (
+	BinaryAdd BinaryOperationKind = iota + 1
+	BinarySubtract
+	BinaryMultiply
+	BinaryDivide
+	BinaryEqual
+	BinaryNotEqual
+	BinaryLess
+	BinaryLessOrEqual
+	BinaryGreater
+	BinaryGreaterOrEqual
+	BinaryAnd
+	BinaryOr
+)
+
+// BinaryExpression describes one immutable binary operation.
+type BinaryExpression struct {
+	kind        BinaryOperationKind
+	left, right Expression
+}
+
+func (o BinaryExpression) Kind() BinaryOperationKind { return o.kind }
+func (o BinaryExpression) Left() Expression          { return o.left }
+func (o BinaryExpression) Right() Expression         { return o.right }
+
+// BinaryOperation returns e's typed arithmetic, comparison, or logical
+// binary operation data. Coalesce is returned by ConditionalOperation.
+func (e Expression) BinaryOperation() (BinaryExpression, bool) {
+	if !e.IsValid() {
+		return BinaryExpression{}, false
+	}
+	var kind BinaryOperationKind
+	var left, right ast.Expression
+	switch node := e.value.(type) {
+	case ast.Arithmetic:
+		left, right = node.Left(), node.Right()
+		switch node.Operator() {
+		case ast.ArithmeticAdd:
+			kind = BinaryAdd
+		case ast.ArithmeticSubtract:
+			kind = BinarySubtract
+		case ast.ArithmeticMultiply:
+			kind = BinaryMultiply
+		case ast.ArithmeticDivide:
+			kind = BinaryDivide
+		}
+	case ast.Comparison:
+		left, right = node.Left(), node.Right()
+		switch node.Operator() {
+		case ast.ComparisonEqual:
+			kind = BinaryEqual
+		case ast.ComparisonNotEqual:
+			kind = BinaryNotEqual
+		case ast.ComparisonLess:
+			kind = BinaryLess
+		case ast.ComparisonLessOrEqual:
+			kind = BinaryLessOrEqual
+		case ast.ComparisonGreater:
+			kind = BinaryGreater
+		case ast.ComparisonGreaterOrEqual:
+			kind = BinaryGreaterOrEqual
+		}
+	case ast.Logical:
+		left, right = node.Left(), node.Right()
+		switch node.Operator() {
+		case ast.LogicalAnd:
+			kind = BinaryAnd
+		case ast.LogicalOr:
+			kind = BinaryOr
+		}
+	default:
+		return BinaryExpression{}, false
+	}
+	return BinaryExpression{kind: kind, left: expressionFromInternal(left), right: expressionFromInternal(right)}, kind != 0
+}
+
+// ConditionalOperationKind identifies the v1 control-expression forms.
+type ConditionalOperationKind uint8
+
+const (
+	ConditionalIf ConditionalOperationKind = iota + 1
+	ConditionalCoalesce
+)
+
+// ConditionalExpression describes one immutable If or Coalesce expression.
+// Children returns condition/then/else for If and primary/fallback for
+// Coalesce.
+type ConditionalExpression struct {
+	kind     ConditionalOperationKind
+	children []Expression
+}
+
+func (o ConditionalExpression) Kind() ConditionalOperationKind { return o.kind }
+func (o ConditionalExpression) Children() []Expression {
+	return append([]Expression(nil), o.children...)
+}
+func (o ConditionalExpression) Condition() (Expression, bool) {
+	if o.kind != ConditionalIf || len(o.children) != 3 {
+		return Expression{}, false
+	}
+	return o.children[0], true
+}
+func (o ConditionalExpression) Then() (Expression, bool) {
+	if o.kind != ConditionalIf || len(o.children) != 3 {
+		return Expression{}, false
+	}
+	return o.children[1], true
+}
+func (o ConditionalExpression) Else() (Expression, bool) {
+	if o.kind != ConditionalIf || len(o.children) != 3 {
+		return Expression{}, false
+	}
+	return o.children[2], true
+}
+func (o ConditionalExpression) Primary() (Expression, bool) {
+	if o.kind != ConditionalCoalesce || len(o.children) != 2 {
+		return Expression{}, false
+	}
+	return o.children[0], true
+}
+func (o ConditionalExpression) Fallback() (Expression, bool) {
+	if o.kind != ConditionalCoalesce || len(o.children) != 2 {
+		return Expression{}, false
+	}
+	return o.children[1], true
+}
+
+// ConditionalOperation returns e's typed If or Coalesce data.
+func (e Expression) ConditionalOperation() (ConditionalExpression, bool) {
+	if !e.IsValid() {
+		return ConditionalExpression{}, false
+	}
+	switch node := e.value.(type) {
+	case ast.If:
+		return ConditionalExpression{kind: ConditionalIf, children: []Expression{expressionFromInternal(node.Condition()), expressionFromInternal(node.Then()), expressionFromInternal(node.Else())}}, true
+	case ast.Coalesce:
+		return ConditionalExpression{kind: ConditionalCoalesce, children: []Expression{expressionFromInternal(node.Primary()), expressionFromInternal(node.Fallback())}}, true
+	default:
+		return ConditionalExpression{}, false
+	}
+}
+
+// AggregateExpression describes the traversal and optional filter/map data of
+// an aggregate expression.
+type AggregateExpression struct {
+	source    TraversalSource
+	operation AggregateOperation
+	filter    Expression
+	hasFilter bool
+	mapped    Expression
+	hasMap    bool
+}
+
+func (o AggregateExpression) Source() TraversalSource       { return o.source }
+func (o AggregateExpression) Operation() AggregateOperation { return o.operation }
+func (o AggregateExpression) Filter() (Expression, bool)    { return o.filter, o.hasFilter }
+func (o AggregateExpression) Map() (Expression, bool)       { return o.mapped, o.hasMap }
+
+// AggregateOperation returns e's typed aggregate data, including its
+// traversal source and optional filter/map expressions.
+func (e Expression) AggregateOperation() (AggregateExpression, bool) {
+	node, ok := e.value.(ast.Aggregate)
+	if !ok || !e.IsValid() {
+		return AggregateExpression{}, false
+	}
+	result := AggregateExpression{source: TraversalSource{value: node.Source()}, operation: aggregateOperationFromInternal(node.Operation())}
+	if filter, ok := node.Filter(); ok {
+		result.filter, result.hasFilter = expressionFromInternal(filter), true
+	}
+	if mapped, ok := node.Map(); ok {
+		result.mapped, result.hasMap = expressionFromInternal(mapped), true
+	}
+	return result, true
+}
+
+// ExpressionVisitor receives each node during WalkExpression's deterministic
+// pre-order traversal.
+type ExpressionVisitor interface{ VisitExpression(Expression) error }
+
+// ExpressionVisitorFunc adapts a function to ExpressionVisitor.
+type ExpressionVisitorFunc func(Expression) error
+
+func (f ExpressionVisitorFunc) VisitExpression(expression Expression) error { return f(expression) }
+
+// WalkExpression visits expr and every descendant in deterministic pre-order.
+// A valid expression is required; no Engine-owned AST state is exposed.
+func WalkExpression(expr Expression, visitor ExpressionVisitor) error {
+	if !expr.IsValid() {
+		return invalidExpressionArgument("expression is invalid")
+	}
+	if visitor == nil {
+		return invalidExpressionArgument("expression visitor is nil")
+	}
+	stack := []Expression{expr}
+	for len(stack) > 0 {
+		last := len(stack) - 1
+		current := stack[last]
+		stack = stack[:last]
+		if err := visitor.VisitExpression(current); err != nil {
+			return err
+		}
+		children := current.Children()
+		for i := len(children) - 1; i >= 0; i-- {
+			stack = append(stack, children[i])
+		}
+	}
+	return nil
+}
 
 // IsValid reports whether e contains a structurally valid supported AST.
 // Expressions deeper than MaxExpressionDepth remain structurally valid here
@@ -523,6 +975,23 @@ func (o AggregateOperation) internal() (ast.AggregateOperation, error) {
 		return ast.AggregateOperationMax, nil
 	default:
 		return ast.AggregateOperationInvalid, invalidExpressionArgument("aggregate operation is invalid")
+	}
+}
+
+func aggregateOperationFromInternal(operation ast.AggregateOperation) AggregateOperation {
+	switch operation {
+	case ast.AggregateOperationSum:
+		return AggregateSum
+	case ast.AggregateOperationAverage:
+		return AggregateAverage
+	case ast.AggregateOperationCount:
+		return AggregateCount
+	case ast.AggregateOperationMin:
+		return AggregateMin
+	case ast.AggregateOperationMax:
+		return AggregateMax
+	default:
+		return 0
 	}
 }
 

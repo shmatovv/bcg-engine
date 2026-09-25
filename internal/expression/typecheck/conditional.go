@@ -1,8 +1,8 @@
 package typecheck
 
 import (
-	"github.com/shmatovv/bcg-engine/internal/expression/typing"
-	"github.com/shmatovv/bcg-engine/internal/types/value"
+	"github.com/shmatovv/bcg-engine/v2/internal/expression/typing"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/value"
 )
 
 type ConditionalErrorKind uint8

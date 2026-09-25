@@ -1,8 +1,8 @@
 package inference
 
 import (
-	"github.com/shmatovv/bcg-engine/internal/domain/schema"
-	"github.com/shmatovv/bcg-engine/internal/expression/ast"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/schema"
+	"github.com/shmatovv/bcg-engine/v2/internal/expression/ast"
 )
 
 // Context describes the static environment in which an expression is

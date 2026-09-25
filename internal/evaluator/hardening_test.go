@@ -4,16 +4,16 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/shmatovv/bcg-engine/internal/domain/address"
-	"github.com/shmatovv/bcg-engine/internal/domain/schema"
-	"github.com/shmatovv/bcg-engine/internal/domain/semantic"
-	domaintime "github.com/shmatovv/bcg-engine/internal/domain/time"
-	"github.com/shmatovv/bcg-engine/internal/evaluator"
-	"github.com/shmatovv/bcg-engine/internal/expression/ast"
-	"github.com/shmatovv/bcg-engine/internal/impact"
-	"github.com/shmatovv/bcg-engine/internal/model"
-	"github.com/shmatovv/bcg-engine/internal/runtime"
-	"github.com/shmatovv/bcg-engine/internal/types/value"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/address"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/schema"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/semantic"
+	domaintime "github.com/shmatovv/bcg-engine/v2/internal/domain/time"
+	"github.com/shmatovv/bcg-engine/v2/internal/evaluator"
+	"github.com/shmatovv/bcg-engine/v2/internal/expression/ast"
+	"github.com/shmatovv/bcg-engine/v2/internal/impact"
+	"github.com/shmatovv/bcg-engine/v2/internal/model"
+	"github.com/shmatovv/bcg-engine/v2/internal/runtime"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/value"
 )
 
 // TestEvaluateDeepPropertyChain is a release-hardening regression test. It

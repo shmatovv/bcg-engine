@@ -1,8 +1,8 @@
 package value
 
 import (
-	"github.com/shmatovv/bcg-engine/internal/runtime"
-	scenariovalidation "github.com/shmatovv/bcg-engine/internal/scenario"
+	"github.com/shmatovv/bcg-engine/v2/internal/runtime"
+	scenariovalidation "github.com/shmatovv/bcg-engine/v2/internal/scenario"
 )
 
 // ValidateContext verifies runtime context data that depends on a concrete

@@ -1,11 +1,11 @@
 package evaluator
 
 import (
-	"github.com/shmatovv/bcg-engine/internal/provenance"
-	"github.com/shmatovv/bcg-engine/internal/types/datetime"
-	"github.com/shmatovv/bcg-engine/internal/types/series"
-	"github.com/shmatovv/bcg-engine/internal/types/unit"
-	"github.com/shmatovv/bcg-engine/internal/types/value"
+	"github.com/shmatovv/bcg-engine/v2/internal/provenance"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/datetime"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/series"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/unit"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/value"
 )
 
 // SeriesPoint is one evaluated point sample with its ordinary scalar Result.

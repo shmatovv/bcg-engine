@@ -1,8 +1,8 @@
 package time
 
 import (
-	domaintime "github.com/shmatovv/bcg-engine/internal/domain/time"
-	"github.com/shmatovv/bcg-engine/internal/types/datetime"
+	domaintime "github.com/shmatovv/bcg-engine/v2/internal/domain/time"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/datetime"
 )
 
 // ContainsAt reports whether an effective-dated scalar binding applies at

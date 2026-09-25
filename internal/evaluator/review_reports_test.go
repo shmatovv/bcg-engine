@@ -3,15 +3,15 @@ package evaluator_test
 import (
 	"testing"
 
-	"github.com/shmatovv/bcg-engine/internal/constraint/check"
-	"github.com/shmatovv/bcg-engine/internal/domain/identity"
-	domainscenario "github.com/shmatovv/bcg-engine/internal/domain/scenario"
-	"github.com/shmatovv/bcg-engine/internal/domain/scope"
-	domaintime "github.com/shmatovv/bcg-engine/internal/domain/time"
-	"github.com/shmatovv/bcg-engine/internal/model"
-	ruleeval "github.com/shmatovv/bcg-engine/internal/rule/eval"
-	"github.com/shmatovv/bcg-engine/internal/runtime"
-	"github.com/shmatovv/bcg-engine/internal/types/datetime"
+	"github.com/shmatovv/bcg-engine/v2/internal/constraint/check"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/identity"
+	domainscenario "github.com/shmatovv/bcg-engine/v2/internal/domain/scenario"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/scope"
+	domaintime "github.com/shmatovv/bcg-engine/v2/internal/domain/time"
+	"github.com/shmatovv/bcg-engine/v2/internal/model"
+	ruleeval "github.com/shmatovv/bcg-engine/v2/internal/rule/eval"
+	"github.com/shmatovv/bcg-engine/v2/internal/runtime"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/datetime"
 )
 
 func TestEmptyReportsValidateContext(t *testing.T) {

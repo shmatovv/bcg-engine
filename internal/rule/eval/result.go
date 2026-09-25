@@ -1,10 +1,10 @@
 package eval
 
 import (
-	"github.com/shmatovv/bcg-engine/internal/domain/identity"
-	domainrule "github.com/shmatovv/bcg-engine/internal/domain/rule"
-	"github.com/shmatovv/bcg-engine/internal/evaluator"
-	"github.com/shmatovv/bcg-engine/internal/types/value"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/identity"
+	domainrule "github.com/shmatovv/bcg-engine/v2/internal/domain/rule"
+	"github.com/shmatovv/bcg-engine/v2/internal/evaluator"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/value"
 )
 
 // Result is the runtime state of one declarative Rule.

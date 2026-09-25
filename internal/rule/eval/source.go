@@ -1,9 +1,9 @@
 package eval
 
 import (
-	"github.com/shmatovv/bcg-engine/internal/domain/identity"
-	domainrule "github.com/shmatovv/bcg-engine/internal/domain/rule"
-	"github.com/shmatovv/bcg-engine/internal/evaluator"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/identity"
+	domainrule "github.com/shmatovv/bcg-engine/v2/internal/domain/rule"
+	"github.com/shmatovv/bcg-engine/v2/internal/evaluator"
 )
 
 // Source is the small declaration-plus-evaluation capability used by Rule

@@ -1,6 +1,6 @@
 package scope
 
-import domainscope "github.com/shmatovv/bcg-engine/internal/domain/scope"
+import domainscope "github.com/shmatovv/bcg-engine/v2/internal/domain/scope"
 
 // Matches reports whether every selector required by a ValueBinding is
 // satisfied by the calculation scope values.

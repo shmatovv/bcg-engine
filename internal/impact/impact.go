@@ -3,14 +3,14 @@ package impact
 import (
 	"sort"
 
-	"github.com/shmatovv/bcg-engine/internal/domain/address"
-	"github.com/shmatovv/bcg-engine/internal/domain/schema"
-	"github.com/shmatovv/bcg-engine/internal/evaluator"
-	"github.com/shmatovv/bcg-engine/internal/graph/dependency"
-	"github.com/shmatovv/bcg-engine/internal/model"
-	"github.com/shmatovv/bcg-engine/internal/plan"
-	"github.com/shmatovv/bcg-engine/internal/provenance"
-	"github.com/shmatovv/bcg-engine/internal/runtime"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/address"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/schema"
+	"github.com/shmatovv/bcg-engine/v2/internal/evaluator"
+	"github.com/shmatovv/bcg-engine/v2/internal/graph/dependency"
+	"github.com/shmatovv/bcg-engine/v2/internal/model"
+	"github.com/shmatovv/bcg-engine/v2/internal/plan"
+	"github.com/shmatovv/bcg-engine/v2/internal/provenance"
+	"github.com/shmatovv/bcg-engine/v2/internal/runtime"
 )
 
 // AnalyzeStructural reports every concrete property that may downstream-read

@@ -3,7 +3,7 @@ package bcg
 import (
 	"fmt"
 
-	"github.com/shmatovv/bcg-engine/internal/domain/address"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/address"
 )
 
 // ObjectKind identifies the concrete object that owns a property.

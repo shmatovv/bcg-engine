@@ -7,7 +7,7 @@ import (
 	"sort"
 	"testing"
 
-	bcg "github.com/shmatovv/bcg-engine"
+	bcg "github.com/shmatovv/bcg-engine/v2"
 )
 
 // These tests deliberately use only the public package. They cover release

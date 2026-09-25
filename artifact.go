@@ -7,8 +7,8 @@ import (
 	"reflect"
 	"sort"
 
-	"github.com/shmatovv/bcg-engine/internal/domain/scenario"
-	formatbcg "github.com/shmatovv/bcg-engine/internal/format/bcg"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/scenario"
+	formatbcg "github.com/shmatovv/bcg-engine/v2/internal/format/bcg"
 )
 
 // FormatVersion is the current portable .bcg wire-format version.

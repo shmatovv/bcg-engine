@@ -1,8 +1,8 @@
 package bcg
 
 import (
-	"github.com/shmatovv/bcg-engine/internal/evaluator"
-	"github.com/shmatovv/bcg-engine/internal/provenance"
+	"github.com/shmatovv/bcg-engine/v2/internal/evaluator"
+	"github.com/shmatovv/bcg-engine/v2/internal/provenance"
 )
 
 // Explanation is actual structured scalar execution provenance. It is never

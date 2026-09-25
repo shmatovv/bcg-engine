@@ -4,15 +4,15 @@ import (
 	"math/big"
 	"sort"
 
-	"github.com/shmatovv/bcg-engine/internal/domain/address"
-	"github.com/shmatovv/bcg-engine/internal/domain/identity"
-	"github.com/shmatovv/bcg-engine/internal/domain/schema"
-	"github.com/shmatovv/bcg-engine/internal/domain/semantic"
-	"github.com/shmatovv/bcg-engine/internal/expression/ast"
-	"github.com/shmatovv/bcg-engine/internal/expression/inference"
-	"github.com/shmatovv/bcg-engine/internal/expression/typing"
-	"github.com/shmatovv/bcg-engine/internal/provenance"
-	enginevalue "github.com/shmatovv/bcg-engine/internal/types/value"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/address"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/identity"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/schema"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/semantic"
+	"github.com/shmatovv/bcg-engine/v2/internal/expression/ast"
+	"github.com/shmatovv/bcg-engine/v2/internal/expression/inference"
+	"github.com/shmatovv/bcg-engine/v2/internal/expression/typing"
+	"github.com/shmatovv/bcg-engine/v2/internal/provenance"
+	enginevalue "github.com/shmatovv/bcg-engine/v2/internal/types/value"
 )
 
 // evaluateAggregate executes the Core v1 semantic graph aggregate pipeline:

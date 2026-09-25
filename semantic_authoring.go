@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/shmatovv/bcg-engine/internal/domain/semantic"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/semantic"
 )
 
 // EntitySpec describes one semantic Entity. Name is optional; a non-nil

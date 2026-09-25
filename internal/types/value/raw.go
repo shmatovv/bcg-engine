@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/shmatovv/bcg-engine/internal/types/date"
-	"github.com/shmatovv/bcg-engine/internal/types/datetime"
-	"github.com/shmatovv/bcg-engine/internal/types/decimal"
-	"github.com/shmatovv/bcg-engine/internal/types/duration"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/date"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/datetime"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/decimal"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/duration"
 )
 
 // Raw represents a raw engine value.

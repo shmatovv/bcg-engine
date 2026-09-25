@@ -1,10 +1,10 @@
 package semantic
 
 import (
-	"github.com/shmatovv/bcg-engine/internal/domain/scope"
-	domaintime "github.com/shmatovv/bcg-engine/internal/domain/time"
-	"github.com/shmatovv/bcg-engine/internal/types/series"
-	"github.com/shmatovv/bcg-engine/internal/types/value"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/scope"
+	domaintime "github.com/shmatovv/bcg-engine/v2/internal/domain/time"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/series"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/value"
 )
 
 // BindingValueKind distinguishes a concrete TypedValue from explicit Null.

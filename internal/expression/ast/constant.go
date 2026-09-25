@@ -1,6 +1,6 @@
 package ast
 
-import "github.com/shmatovv/bcg-engine/internal/types/value"
+import "github.com/shmatovv/bcg-engine/v2/internal/types/value"
 
 // Constant represents a literal typed value in an expression.
 //

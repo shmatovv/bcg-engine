@@ -3,13 +3,13 @@ package eval
 import (
 	"sort"
 
-	"github.com/shmatovv/bcg-engine/internal/domain/identity"
-	domainrule "github.com/shmatovv/bcg-engine/internal/domain/rule"
-	domaintime "github.com/shmatovv/bcg-engine/internal/domain/time"
-	"github.com/shmatovv/bcg-engine/internal/evaluator"
-	"github.com/shmatovv/bcg-engine/internal/expression/ast"
-	resolvervalue "github.com/shmatovv/bcg-engine/internal/resolver/value"
-	"github.com/shmatovv/bcg-engine/internal/runtime"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/identity"
+	domainrule "github.com/shmatovv/bcg-engine/v2/internal/domain/rule"
+	domaintime "github.com/shmatovv/bcg-engine/v2/internal/domain/time"
+	"github.com/shmatovv/bcg-engine/v2/internal/evaluator"
+	"github.com/shmatovv/bcg-engine/v2/internal/expression/ast"
+	resolvervalue "github.com/shmatovv/bcg-engine/v2/internal/resolver/value"
+	"github.com/shmatovv/bcg-engine/v2/internal/runtime"
 )
 
 // One evaluates one committed Rule.

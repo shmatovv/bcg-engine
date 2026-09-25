@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	bcg "github.com/shmatovv/bcg-engine"
+	bcg "github.com/shmatovv/bcg-engine/v2"
 )
 
 type productAuthoringFixture struct {

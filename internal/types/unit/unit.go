@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/shmatovv/bcg-engine/internal/types/rational"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/rational"
 )
 
 // UnitID identifies a concrete symbolic unit.

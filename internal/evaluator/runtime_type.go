@@ -1,10 +1,10 @@
 package evaluator
 
 import (
-	"github.com/shmatovv/bcg-engine/internal/expression/typing"
-	"github.com/shmatovv/bcg-engine/internal/types/decimal"
-	"github.com/shmatovv/bcg-engine/internal/types/unit"
-	enginevalue "github.com/shmatovv/bcg-engine/internal/types/value"
+	"github.com/shmatovv/bcg-engine/v2/internal/expression/typing"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/decimal"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/unit"
+	enginevalue "github.com/shmatovv/bcg-engine/v2/internal/types/value"
 )
 
 // normalizeResolvedToStaticType converts one already-evaluated sample value to

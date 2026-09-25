@@ -5,12 +5,12 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/shmatovv/bcg-engine/internal/domain/scope"
-	"github.com/shmatovv/bcg-engine/internal/domain/semantic"
-	domaintime "github.com/shmatovv/bcg-engine/internal/domain/time"
-	"github.com/shmatovv/bcg-engine/internal/types/series"
-	internalunit "github.com/shmatovv/bcg-engine/internal/types/unit"
-	enginevalue "github.com/shmatovv/bcg-engine/internal/types/value"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/scope"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/semantic"
+	domaintime "github.com/shmatovv/bcg-engine/v2/internal/domain/time"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/series"
+	internalunit "github.com/shmatovv/bcg-engine/v2/internal/types/unit"
+	enginevalue "github.com/shmatovv/bcg-engine/v2/internal/types/value"
 )
 
 // EffectivePeriod is an immutable optional-ended half-open [from,to) time

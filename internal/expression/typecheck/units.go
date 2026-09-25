@@ -1,6 +1,6 @@
 package typecheck
 
-import "github.com/shmatovv/bcg-engine/internal/types/unit"
+import "github.com/shmatovv/bcg-engine/v2/internal/types/unit"
 
 // AdditiveUnit returns the result Unit for addition/subtraction.
 //

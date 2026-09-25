@@ -16,8 +16,10 @@
 // dependency graphs, or evaluator caches. Typed EntityType, RelationType,
 // PropertyDefinition, PropertyContract, Trait, ScopeDefinition, Entity,
 // Relation, ValueBinding, Constraint, and Rule values are authored through
-// Draft. Expression provides immutable typed AST builders; validation and
-// evaluation retain responsibility for cross-model expression semantics.
+// Draft and losslessly inspectable on a committed Model. Expression provides
+// immutable typed AST builders plus Kind, Children, typed node accessors, and
+// WalkExpression; validation and evaluation retain responsibility for
+// cross-model expression semantics.
 // Scenario is an immutable value-only overlay constructed against one
 // committed Model version.
 //

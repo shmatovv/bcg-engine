@@ -3,12 +3,12 @@ package plan
 import (
 	"sort"
 
-	"github.com/shmatovv/bcg-engine/internal/domain/address"
-	"github.com/shmatovv/bcg-engine/internal/domain/schema"
-	domaintime "github.com/shmatovv/bcg-engine/internal/domain/time"
-	"github.com/shmatovv/bcg-engine/internal/graph/dependency"
-	resolvervalue "github.com/shmatovv/bcg-engine/internal/resolver/value"
-	"github.com/shmatovv/bcg-engine/internal/runtime"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/address"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/schema"
+	domaintime "github.com/shmatovv/bcg-engine/v2/internal/domain/time"
+	"github.com/shmatovv/bcg-engine/v2/internal/graph/dependency"
+	resolvervalue "github.com/shmatovv/bcg-engine/v2/internal/resolver/value"
+	"github.com/shmatovv/bcg-engine/v2/internal/runtime"
 )
 
 // Build constructs the target-scoped Effective Evaluation Plan for one At

@@ -3,10 +3,10 @@ package bcg
 import (
 	"fmt"
 
-	"github.com/shmatovv/bcg-engine/internal/domain/identity"
-	internalmodel "github.com/shmatovv/bcg-engine/internal/model"
-	"github.com/shmatovv/bcg-engine/internal/types/decimal"
-	"github.com/shmatovv/bcg-engine/internal/types/precision"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/identity"
+	internalmodel "github.com/shmatovv/bcg-engine/v2/internal/model"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/decimal"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/precision"
 )
 
 // RoundingMode specifies how finite-precision decimal operations round.

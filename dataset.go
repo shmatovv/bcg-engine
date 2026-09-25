@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/shmatovv/bcg-engine/internal/model"
+	"github.com/shmatovv/bcg-engine/v2/internal/model"
 )
 
 // Dataset is an immutable, fully materialized external runtime data snapshot

@@ -1,8 +1,8 @@
 package bcg
 
 import (
-	"github.com/shmatovv/bcg-engine/internal/evaluator"
-	"github.com/shmatovv/bcg-engine/internal/types/series"
+	"github.com/shmatovv/bcg-engine/v2/internal/evaluator"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/series"
 )
 
 // SeriesAxis identifies Point or Interval coordinates.

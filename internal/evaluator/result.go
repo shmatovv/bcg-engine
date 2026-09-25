@@ -1,8 +1,8 @@
 package evaluator
 
 import (
-	"github.com/shmatovv/bcg-engine/internal/provenance"
-	"github.com/shmatovv/bcg-engine/internal/types/value"
+	"github.com/shmatovv/bcg-engine/v2/internal/provenance"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/value"
 )
 
 // Result is one scalar evaluation result together with complete provenance

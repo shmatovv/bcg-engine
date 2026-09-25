@@ -1,8 +1,8 @@
 package value
 
 import (
-	"github.com/shmatovv/bcg-engine/internal/domain/address"
-	domainscenario "github.com/shmatovv/bcg-engine/internal/domain/scenario"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/address"
+	domainscenario "github.com/shmatovv/bcg-engine/v2/internal/domain/scenario"
 )
 
 func collectScenarioCandidates(

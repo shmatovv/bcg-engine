@@ -3,8 +3,8 @@ package rational
 import (
 	"math/big"
 
-	"github.com/shmatovv/bcg-engine/internal/types/decimal"
-	"github.com/shmatovv/bcg-engine/internal/types/precision"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/decimal"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/precision"
 )
 
 // FromDecimal returns the exact Rational representation of value.

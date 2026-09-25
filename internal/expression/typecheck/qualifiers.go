@@ -3,7 +3,7 @@ package typecheck
 import (
 	"fmt"
 
-	"github.com/shmatovv/bcg-engine/internal/expression/typing"
+	"github.com/shmatovv/bcg-engine/v2/internal/expression/typing"
 )
 
 // requireSameTemporalMode verifies that operands have exactly the same

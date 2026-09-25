@@ -3,10 +3,10 @@ package model
 import (
 	"sort"
 
-	"github.com/shmatovv/bcg-engine/internal/domain/address"
-	"github.com/shmatovv/bcg-engine/internal/domain/identity"
-	domainrule "github.com/shmatovv/bcg-engine/internal/domain/rule"
-	"github.com/shmatovv/bcg-engine/internal/graph/dependency"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/address"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/identity"
+	domainrule "github.com/shmatovv/bcg-engine/v2/internal/domain/rule"
+	"github.com/shmatovv/bcg-engine/v2/internal/graph/dependency"
 )
 
 // RuleDependencies is the immutable structural set of concrete properties

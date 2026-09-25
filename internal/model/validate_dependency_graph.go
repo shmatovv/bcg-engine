@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/shmatovv/bcg-engine/internal/domain/address"
-	"github.com/shmatovv/bcg-engine/internal/graph/dependency"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/address"
+	"github.com/shmatovv/bcg-engine/v2/internal/graph/dependency"
 )
 
 // validateDependencyGraph constructs the concrete value dependency graph and

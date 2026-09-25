@@ -3,7 +3,7 @@ package semantic
 import (
 	"fmt"
 
-	"github.com/shmatovv/bcg-engine/internal/domain/identity"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/identity"
 )
 
 // Entity is an instance of an EntityType in the semantic model.

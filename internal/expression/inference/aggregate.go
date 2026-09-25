@@ -1,9 +1,9 @@
 package inference
 
 import (
-	"github.com/shmatovv/bcg-engine/internal/expression/ast"
-	"github.com/shmatovv/bcg-engine/internal/expression/typecheck"
-	"github.com/shmatovv/bcg-engine/internal/expression/typing"
+	"github.com/shmatovv/bcg-engine/v2/internal/expression/ast"
+	"github.com/shmatovv/bcg-engine/v2/internal/expression/typecheck"
+	"github.com/shmatovv/bcg-engine/v2/internal/expression/typing"
 )
 
 // AggregateInferenceErrorKind identifies why recursive aggregate inference

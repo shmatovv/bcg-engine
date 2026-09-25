@@ -15,13 +15,19 @@ the public package provides lifecycle authoring, evaluation, explanation,
 dependency impact, constraints, rules, and an optional incremental evaluation
 session.
 
-Module: `github.com/shmatovv/bcg-engine`. Requires Go 1.22 or newer.
+Module: `github.com/shmatovv/bcg-engine/v2`. Requires Go 1.22 or newer.
 This is a private, proprietary library.
+
+v1.2.0 (`d7cc776`) remains the stable historical v1 release. This v2 module
+currently preserves its semantic and `.bcg v1` wire behavior while adding the
+public lossless-inspection foundation. It does not yet implement `.bcg v2`,
+Enums, presence policies, keys, cardinalities, invariants, extension
+functions, dataset patches/rebases, model evolution, or dependency planning.
 
 Import the consumer API as:
 
 ```go
-import bcg "github.com/shmatovv/bcg-engine"
+import bcg "github.com/shmatovv/bcg-engine/v2"
 ```
 
 ```go
@@ -295,6 +301,21 @@ Derived expressions are exposed losslessly through
 them even when unrelated schema is changed. Expressions over 512 nodes may be
 assembled temporarily, but Validate and Commit reject them using the shared v1
 depth limit.
+
+### Expression inspection and traversal
+
+Every decoded or authored current expression node is publicly inspectable.
+`Kind`, `IsValid`, `Depth`, and `Children` provide stable tree shape; typed
+accessors expose constants (`ConstantValue`), property references
+(`PropertyReference`), unary/binary operations (`UnaryOperation`,
+`BinaryOperation`), control expressions (`ConditionalOperation`), and all
+aggregate data (`AggregateOperation`, including its `TraversalSource`, filter,
+and map). Returned child collections are caller-owned copies.
+
+`WalkExpression(expr, visitor)` performs deterministic pre-order traversal.
+Use `ExpressionVisitorFunc` for a concise visitor. The inspection data is
+sufficient to recreate a semantically equivalent expression with the public
+builders; it does not expose mutable internal AST nodes.
 
 ## Semantic data, bindings, and declarations
 
@@ -804,6 +825,11 @@ Committed `Model` offers read-only deterministic lists and direct lookups:
 `Rules`/`Rule`. `EntityInfo`, `RelationInfo`, `NamedInfo`, `PropertyInfo`, and
 `ScopeDefinitionInfo` provide compact inspection; `Declaration`, `Schema`,
 and `Definition` return the full immutable declaration where relevant.
+For bulk lossless inspection, use `EntityTypeDefinitions`,
+`RelationTypeDefinitions`, `TraitDefinitions`, `PropertyContractDefinitions`,
+`ScopeDefinitionDeclarations`, and `PropertyDefinitionDeclarations`. Entities,
+relations, bindings, constraints, rules, scenarios, source series, selectors,
+and effective periods already return their complete immutable public values.
 
 ### Artifacts, scenarios, errors, and zero values
 
@@ -846,7 +872,7 @@ BCG Engine — детерминированный Go-движок расчёто
 `.bcg`. Пакет для приложения импортируется так:
 
 ```go
-import bcg "github.com/shmatovv/bcg-engine"
+import bcg "github.com/shmatovv/bcg-engine/v2"
 ```
 
 Требуется Go 1.22 или новее. Формат `.bcg v1` описан отдельно в
@@ -1250,5 +1276,5 @@ serialization, `Evaluate`, `EvaluateMany`, `EvaluateSeries`, `Explain`,
 | Diagnostics | validation types, sentinels `Err...`, `EngineError`, `CacheStats` |
 
 Для точных типов параметров и всех accessor-методов используйте GoDoc вашего
-редактора или `go doc github.com/shmatovv/bcg-engine`; все exported declarations
+редактора или `go doc github.com/shmatovv/bcg-engine/v2`; все exported declarations
 также перечислены в англоязычном разделе **Public API reference** выше.

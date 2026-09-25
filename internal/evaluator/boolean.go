@@ -3,7 +3,7 @@ package evaluator
 import (
 	"fmt"
 
-	"github.com/shmatovv/bcg-engine/internal/types/value"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/value"
 )
 
 // InterpretScalarBool applies the common decision boundary for a scalar

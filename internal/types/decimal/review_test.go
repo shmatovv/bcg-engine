@@ -5,7 +5,7 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/shmatovv/bcg-engine/internal/types/precision"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/precision"
 )
 
 func TestMulChecksNormalizedScale(t *testing.T) {

@@ -1,8 +1,8 @@
 package plan
 
 import (
-	"github.com/shmatovv/bcg-engine/internal/graph/dependency"
-	resolvervalue "github.com/shmatovv/bcg-engine/internal/resolver/value"
+	"github.com/shmatovv/bcg-engine/v2/internal/graph/dependency"
+	resolvervalue "github.com/shmatovv/bcg-engine/v2/internal/resolver/value"
 )
 
 // Source is the composed capability required for effective planning. It does

@@ -3,17 +3,17 @@ package bcg
 import (
 	"fmt"
 
-	constraintcheck "github.com/shmatovv/bcg-engine/internal/constraint/check"
-	"github.com/shmatovv/bcg-engine/internal/constraint/feasibility"
-	"github.com/shmatovv/bcg-engine/internal/domain/address"
-	domainscenario "github.com/shmatovv/bcg-engine/internal/domain/scenario"
-	"github.com/shmatovv/bcg-engine/internal/evaluator"
-	"github.com/shmatovv/bcg-engine/internal/impact"
-	"github.com/shmatovv/bcg-engine/internal/model"
-	resolvervalue "github.com/shmatovv/bcg-engine/internal/resolver/value"
-	ruleeval "github.com/shmatovv/bcg-engine/internal/rule/eval"
-	"github.com/shmatovv/bcg-engine/internal/runtime"
-	modelscenario "github.com/shmatovv/bcg-engine/internal/scenario"
+	constraintcheck "github.com/shmatovv/bcg-engine/v2/internal/constraint/check"
+	"github.com/shmatovv/bcg-engine/v2/internal/constraint/feasibility"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/address"
+	domainscenario "github.com/shmatovv/bcg-engine/v2/internal/domain/scenario"
+	"github.com/shmatovv/bcg-engine/v2/internal/evaluator"
+	"github.com/shmatovv/bcg-engine/v2/internal/impact"
+	"github.com/shmatovv/bcg-engine/v2/internal/model"
+	resolvervalue "github.com/shmatovv/bcg-engine/v2/internal/resolver/value"
+	ruleeval "github.com/shmatovv/bcg-engine/v2/internal/rule/eval"
+	"github.com/shmatovv/bcg-engine/v2/internal/runtime"
+	modelscenario "github.com/shmatovv/bcg-engine/v2/internal/scenario"
 )
 
 // EvaluationSnapshot is an immutable effective evaluation source: one exact

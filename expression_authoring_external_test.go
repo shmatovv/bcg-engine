@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	bcg "github.com/shmatovv/bcg-engine"
+	bcg "github.com/shmatovv/bcg-engine/v2"
 )
 
 func TestPublicExpressionBuilders(t *testing.T) {
@@ -329,6 +329,9 @@ func TestPublicScalarExpressionRoundTripParity(t *testing.T) {
 		if !ok || !expression.IsValid() {
 			t.Fatalf("round-tripped %s expression = %#v, %v", item.name, expression, ok)
 		}
+		// The public v2 introspection contract must be sufficient to rebuild
+		// every decoded v1 node without internal AST access.
+		assertInspectableExpression(t, expression)
 	}
 }
 
@@ -379,9 +382,15 @@ func TestPublicAbsolutePropertyExpressionRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := bcg.Unmarshal(encoded); err != nil {
+	decoded, err := bcg.Unmarshal(encoded)
+	if err != nil {
 		t.Fatalf("absolute property expression round trip: %v", err)
 	}
+	stored, ok := mustPublicPropertyInfo(t, decoded.Model(), derivedID).Schema().Computation().Expression()
+	if !ok {
+		t.Fatal("absolute property expression was not decoded")
+	}
+	assertInspectableExpression(t, stored)
 }
 
 func TestPublicAggregateExpressionRoundTrip(t *testing.T) {

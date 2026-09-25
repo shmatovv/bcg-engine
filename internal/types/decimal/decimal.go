@@ -5,7 +5,7 @@ import (
 	"math/big"
 	"strings"
 
-	"github.com/shmatovv/bcg-engine/internal/types/precision"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/precision"
 )
 
 // MaxScale is the maximum number of fractional decimal digits supported by Decimal.
