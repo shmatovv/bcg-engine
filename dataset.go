@@ -160,7 +160,7 @@ func (b *DatasetBuilder) Build() (Dataset, error) {
 	}
 	value, err := b.value.Build()
 	if err != nil {
-		return Dataset{}, publicError(err)
+		return Dataset{}, publicDatasetError(err)
 	}
 	return Dataset{value: value, modelDigest: b.modelDigest}, nil
 }

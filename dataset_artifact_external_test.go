@@ -2,6 +2,7 @@ package bcg_test
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -77,6 +78,28 @@ func TestDatasetArtifactRejectsIdentityCorruption(t *testing.T) {
 		if _, err := bcg.UnmarshalDataset(m, []byte(change)); err == nil {
 			t.Fatal("corrupt .bcgd accepted")
 		}
+	}
+}
+
+func TestDatasetArtifactRejectsUnknownFormatAndEngineClearly(t *testing.T) {
+	model := bcgdGoldenModel(t)
+	fixture, err := os.ReadFile("testdata/comprehensive-v1.bcgd")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		name string
+		data string
+		want error
+	}{
+		{"newer format", strings.Replace(string(fixture), `"formatVersion":1`, `"formatVersion":999`, 1), bcg.ErrUnsupportedFormat},
+		{"wrong engine", strings.Replace(string(fixture), `"engineCompatibility":"bcg-engine-v2"`, `"engineCompatibility":"future-engine"`, 1), bcg.ErrIncompatibleEngine},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := bcg.UnmarshalDataset(model, []byte(test.data)); !errors.Is(err, test.want) {
+				t.Fatalf("UnmarshalDataset error = %v, want %v", err, test.want)
+			}
+		})
 	}
 }
 

@@ -1,6 +1,15 @@
 package schema
 
-import "github.com/shmatovv/bcg-engine/v2/internal/domain/identity"
+import (
+	"sort"
+
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/identity"
+)
+
+// MaxEnumOptions bounds one enum declaration. It is deliberately generous:
+// the limit is a host-safety bound for untrusted artifacts, not a business
+// modelling recommendation.
+const MaxEnumOptions = 4096
 
 type EnumOption struct {
 	id   identity.UUID
@@ -27,6 +36,9 @@ func NewEnumDefinition(id identity.UUID, name string, options []EnumOption) Enum
 	if id.IsZero() || name == "" {
 		panic("schema: invalid enum definition")
 	}
+	if len(options) == 0 || len(options) > MaxEnumOptions {
+		panic("schema: invalid enum option count")
+	}
 	seen := map[identity.UUID]struct{}{}
 	result := make([]EnumOption, len(options))
 	for i, option := range options {
@@ -39,6 +51,9 @@ func NewEnumDefinition(id identity.UUID, name string, options []EnumOption) Enum
 		seen[option.ID()] = struct{}{}
 		result[i] = option
 	}
+	// Enum option order is explicitly non-semantic. Canonicalize it at the
+	// ownership boundary so all public inspection paths are deterministic.
+	sort.Slice(result, func(i, j int) bool { return result[i].ID().String() < result[j].ID().String() })
 	return EnumDefinition{id: id, name: name, options: result}
 }
 func (d EnumDefinition) ID() identity.UUID     { return d.id }
@@ -53,7 +68,7 @@ func (d EnumDefinition) Option(id identity.UUID) (EnumOption, bool) {
 	return EnumOption{}, false
 }
 func (d EnumDefinition) IsValid() bool {
-	if d.id.IsZero() || d.name == "" {
+	if d.id.IsZero() || d.name == "" || len(d.options) == 0 || len(d.options) > MaxEnumOptions {
 		return false
 	}
 	seen := map[identity.UUID]struct{}{}

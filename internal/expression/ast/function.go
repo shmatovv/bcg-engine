@@ -15,6 +15,9 @@ func NewFunctionCall(ref function.Ref, args []Expression) FunctionCall {
 	if !ref.IsValid() {
 		panic("ast: invalid function ref")
 	}
+	if len(args) > function.MaxArguments {
+		panic("ast: function argument count exceeds limit")
+	}
 	copy := append([]Expression(nil), args...)
 	for _, arg := range copy {
 		if arg == nil {
@@ -27,7 +30,7 @@ func NewFunctionCall(ref function.Ref, args []Expression) FunctionCall {
 func (f FunctionCall) Ref() function.Ref       { return f.ref }
 func (f FunctionCall) Arguments() []Expression { return append([]Expression(nil), f.args...) }
 func (f FunctionCall) IsValid() bool {
-	if !f.ref.IsValid() {
+	if !f.ref.IsValid() || len(f.args) > function.MaxArguments {
 		return false
 	}
 	for _, arg := range f.args {

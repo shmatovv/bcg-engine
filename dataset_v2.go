@@ -3,6 +3,7 @@ package bcg
 import (
 	"fmt"
 	"sort"
+	"strconv"
 
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/address"
 )
@@ -57,11 +58,85 @@ func (v RuntimeValidator) ValidateValueBinding(binding ValueBinding, object Runt
 	if object.kind == ObjectEntity {
 		_ = b.AddEntity(object.entity)
 	} else {
+		// A relation-owned binding still needs a minimal valid endpoint world for
+		// Dataset validation. These synthetic entities are validator-local: they
+		// prove only the relation's schema shape and never establish global
+		// cardinality, keys, or contextual integrity.
+		if !v.addLocalRelationEndpoints(b, object.relation) {
+			return invalidRuntimeReport("relation endpoints are incompatible with the model")
+		}
 		_ = b.AddRelation(object.relation)
 	}
 	_ = b.AddValueBinding(binding)
 	r, _ := b.Validate()
 	return r
+}
+
+func (v RuntimeValidator) addLocalRelationEndpoints(builder *DatasetBuilder, relation Relation) bool {
+	typeDefinition, ok := v.model.RelationType(relation.TypeID())
+	if !ok {
+		return false
+	}
+	fromConstraint, hasFrom := typeDefinition.From()
+	toConstraint, hasTo := typeDefinition.To()
+	from, fromEmbedded, ok := v.localEndpointEntity(relation.From(), fromConstraint, hasFrom)
+	if !ok {
+		return false
+	}
+	if !fromEmbedded && builder.AddEntity(from) != nil {
+		return false
+	}
+	if relation.To() == relation.From() {
+		return (!hasTo || v.entityTypeMatchesEndpoint(from.TypeID(), toConstraint)) &&
+			(!hasFrom || v.entityTypeMatchesEndpoint(from.TypeID(), fromConstraint))
+	}
+	to, toEmbedded, ok := v.localEndpointEntity(relation.To(), toConstraint, hasTo)
+	if !ok {
+		return false
+	}
+	return toEmbedded || builder.AddEntity(to) == nil
+}
+
+func (v RuntimeValidator) localEndpointEntity(id ID, constraint EndpointConstraint, constrained bool) (Entity, bool, bool) {
+	if existing, ok := v.model.Entity(id); ok {
+		declaration := existing.Declaration()
+		return declaration, true, !constrained || v.entityTypeMatchesEndpoint(declaration.TypeID(), constraint)
+	}
+	for _, candidate := range v.model.EntityTypeDefinitions() {
+		if constrained && !v.entityTypeMatchesEndpoint(candidate.ID(), constraint) {
+			continue
+		}
+		entity, err := NewEntity(EntitySpec{ID: id, TypeID: candidate.ID()})
+		return entity, false, err == nil
+	}
+	return Entity{}, false, false
+}
+
+func (v RuntimeValidator) entityTypeMatchesEndpoint(typeID ID, endpoint EndpointConstraint) bool {
+	switch endpoint.Kind() {
+	case EndpointEntityType:
+		id, ok := endpoint.ID()
+		return ok && typeID == id
+	case EndpointTrait:
+		traitID, ok := endpoint.ID()
+		if !ok {
+			return false
+		}
+		entityType, found := v.model.EntityType(typeID)
+		if !found {
+			return false
+		}
+		for _, candidate := range entityType.Traits() {
+			if candidate == traitID {
+				return true
+			}
+		}
+		return false
+	case EndpointAnyEntity:
+		return true
+	default:
+		return false
+	}
 }
 func invalidRuntimeReport(message string) ValidationReport {
 	return ValidationReport{issues: []ValidationIssue{{kind: "InvalidRuntimeObject", message: message}}}
@@ -158,9 +233,14 @@ func (s EvaluationSnapshot) CheckStructuralIntegrity() IntegrityReport {
 			if !valid {
 				continue
 			}
+			// Composite components are length-prefixed rather than delimiter
+			// joined: a legal String value may itself contain every possible
+			// delimiter byte. This representation is only an internal lookup
+			// key, but it must still be injective or distinct business keys can
+			// be falsely reported as duplicates.
 			composite := ""
 			for _, p := range parts {
-				composite += p + "\x00"
+				composite += strconv.Itoa(len(p)) + ":" + p
 			}
 			if prior, ok := seen[composite]; ok {
 				r.add(IntegrityIssue{kind: EntityKeyDuplicate, declarationID: key.ID(), hasDeclaration: true, objectID: e.ID(), hasObject: true, conflictingID: prior, hasConflicting: true})
@@ -178,10 +258,12 @@ func (s EvaluationSnapshot) CheckStructuralIntegrity() IntegrityReport {
 			}
 		}
 		for _, e := range entities {
-			if violates(typ.OutgoingCardinality(), out[e.ID()]) {
+			from, hasFrom := typ.From()
+			if (!hasFrom || s.entityMatchesEndpoint(e, from)) && violates(typ.OutgoingCardinality(), out[e.ID()]) {
 				r.add(IntegrityIssue{kind: OutgoingCardinalityViolation, declarationID: typ.ID(), hasDeclaration: true, objectID: e.ID(), hasObject: true})
 			}
-			if violates(typ.IncomingCardinality(), in[e.ID()]) {
+			to, hasTo := typ.To()
+			if (!hasTo || s.entityMatchesEndpoint(e, to)) && violates(typ.IncomingCardinality(), in[e.ID()]) {
 				r.add(IntegrityIssue{kind: IncomingCardinalityViolation, declarationID: typ.ID(), hasDeclaration: true, objectID: e.ID(), hasObject: true})
 			}
 		}
@@ -212,6 +294,37 @@ func violates(c Cardinality, n uint64) bool {
 		return true
 	}
 	return false
+}
+
+// entityMatchesEndpoint scopes a relation cardinality to the entity types
+// that can actually occupy that endpoint. Cardinality describes stored
+// topology of the RelationType; it must not require unrelated entity types to
+// have relations they cannot legally create.
+func (s EvaluationSnapshot) entityMatchesEndpoint(entity Entity, endpoint EndpointConstraint) bool {
+	switch endpoint.Kind() {
+	case EndpointEntityType:
+		id, ok := endpoint.ID()
+		return ok && entity.TypeID() == id
+	case EndpointTrait:
+		traitID, ok := endpoint.ID()
+		if !ok {
+			return false
+		}
+		entityType, found := s.model.EntityType(entity.TypeID())
+		if !found {
+			return false
+		}
+		for _, candidate := range entityType.Traits() {
+			if candidate == traitID {
+				return true
+			}
+		}
+		return false
+	case EndpointAnyEntity:
+		return true
+	default:
+		return false
+	}
 }
 func (r *IntegrityReport) add(i IntegrityIssue) { r.issues = append(r.issues, i) }
 func (r *IntegrityReport) sort() {
@@ -382,6 +495,9 @@ func (d Dataset) Apply(model Model, newDatasetID ID, patch DatasetPatch) (Datase
 	if d.ModelVersionID() != model.VersionID() {
 		return Dataset{}, ValidationReport{}, fmt.Errorf("%w: Dataset belongs to another ModelVersion", ErrInvalidArgument)
 	}
+	if d.modelDigest == (Digest{}) || d.modelDigest != model.SemanticDigest() {
+		return Dataset{}, ValidationReport{}, fmt.Errorf("%w: Dataset belongs to a semantically different Model", ErrInvalidArgument)
+	}
 	es := map[ID]Entity{}
 	rs := map[ID]Relation{}
 	bs := []ValueBinding{}
@@ -494,7 +610,7 @@ func (d Dataset) Apply(model Model, newDatasetID ID, patch DatasetPatch) (Datase
 }
 
 func (d Dataset) Rebase(oldModel, newModel Model, newDatasetID ID) (Dataset, ValidationReport, error) {
-	if !oldModel.IsValid() || !newModel.IsValid() || oldModel.ModelID() != newModel.ModelID() {
+	if !d.IsValid() || !oldModel.IsValid() || !newModel.IsValid() || oldModel.ModelID() != newModel.ModelID() {
 		return Dataset{}, ValidationReport{}, fmt.Errorf("%w: compatible committed Models required", ErrDifferentLogicalModel)
 	}
 	if newDatasetID.IsZero() || newDatasetID == d.ID() {
@@ -502,6 +618,9 @@ func (d Dataset) Rebase(oldModel, newModel Model, newDatasetID ID) (Dataset, Val
 	}
 	if d.ModelVersionID() != oldModel.VersionID() {
 		return Dataset{}, ValidationReport{}, fmt.Errorf("%w: Dataset does not belong to old Model", ErrInvalidArgument)
+	}
+	if d.modelDigest == (Digest{}) || d.modelDigest != oldModel.SemanticDigest() {
+		return Dataset{}, ValidationReport{}, fmt.Errorf("%w: Dataset belongs to a semantically different old Model", ErrInvalidArgument)
 	}
 	b, err := NewDatasetBuilder(newModel, newDatasetID)
 	if err != nil {

@@ -49,11 +49,11 @@ func (t EntityType) ID() ID { return idFromInternal(t.value.ID()) }
 func (t EntityType) Name() string { return t.value.Name() }
 
 // Traits returns an owned list of required Trait IDs.
-func (t EntityType) Traits() []ID { return publicSchemaIDs(t.value.Traits()) }
+func (t EntityType) Traits() []ID { return sortedPublicSchemaIDs(t.value.Traits()) }
 
 // PropertyDefinitions returns an owned list of available PropertyDefinition IDs.
 func (t EntityType) PropertyDefinitions() []ID {
-	return publicSchemaIDs(t.value.PropertyDefinitions())
+	return sortedPublicSchemaIDs(t.value.PropertyDefinitions())
 }
 
 // IsValid reports structural validity. Referential validity is checked by a Draft.
@@ -287,7 +287,7 @@ func (t RelationType) To() (EndpointConstraint, bool) {
 
 // PropertyDefinitions returns an owned list of available PropertyDefinition IDs.
 func (t RelationType) PropertyDefinitions() []ID {
-	return publicSchemaIDs(t.value.PropertyDefinitions())
+	return sortedPublicSchemaIDs(t.value.PropertyDefinitions())
 }
 func (t RelationType) OutgoingCardinality() Cardinality {
 	return cardinalityFromInternal(t.value.OutgoingCardinality())
@@ -756,7 +756,7 @@ func (t Trait) Name() string { return t.value.Name() }
 
 // RequiredPropertyContracts returns an owned list of required contract IDs.
 func (t Trait) RequiredPropertyContracts() []ID {
-	return publicSchemaIDs(t.value.RequiredPropertyContracts())
+	return sortedPublicSchemaIDs(t.value.RequiredPropertyContracts())
 }
 
 // IsValid reports structural validity. Referential validity is checked by a Draft.

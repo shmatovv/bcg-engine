@@ -983,6 +983,9 @@ func CallFunction(ref FunctionRef, args ...Expression) (Expression, error) {
 	if err != nil {
 		return Expression{}, fmt.Errorf("%w: function ref is invalid", ErrInvalidArgument)
 	}
+	if len(args) > MaxFunctionArguments {
+		return Expression{}, fmt.Errorf("%w: function argument count exceeds %d", ErrInvalidArgument, MaxFunctionArguments)
+	}
 	arguments := make([]ast.Expression, len(args))
 	for index, argument := range args {
 		value, argumentErr := requiredExpression(argument, "function argument")

@@ -772,6 +772,13 @@ func publicValueSortKey(value Value) string {
 	case ValueDuration:
 		item, _ := value.Duration()
 		return "Duration:" + item.String()
+	case ValueEnum:
+		definition, hasDefinition := value.EnumDefinitionID()
+		option, hasOption := value.EnumOptionID()
+		if !hasDefinition || !hasOption {
+			return "Invalid"
+		}
+		return "Enum:" + definition.String() + ":" + option.String()
 	default:
 		return "Invalid"
 	}

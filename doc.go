@@ -27,8 +27,9 @@
 // of the same logical Model. AnalyzeEvolution conservatively classifies the
 // semantic consequences of that diff with effect flags. It never migrates
 // data and cannot know whether a concrete Dataset contains data that would be
-// affected; PotentialDataLoss is risk, not proof. Dataset-aware compatibility
-// is intentionally a later Dataset Rebase concern. Model.SemanticDigest is a
+// affected; PotentialDataLoss is risk, not proof. Dataset.Rebase is the
+// separate concrete compatibility check for unchanged runtime content; it is
+// not data migration. Model.SemanticDigest is a
 // SHA-256 digest of canonical semantic content, excluding version lineage and
 // diagnostic metadata.
 //

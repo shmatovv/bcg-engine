@@ -16,6 +16,11 @@ type PropertyTarget struct {
 	id    ID
 }
 
+// MaxDependencyPlanDepth bounds recursive schema dependency expansion. It is
+// intentionally much higher than expression nesting because it limits a
+// graph walk, not user-authored AST structure.
+const MaxDependencyPlanDepth = 4096
+
 // NewPropertyTarget constructs a schema-level evaluation target.
 func NewPropertyTarget(owner PropertyOwner, definitionID ID) (PropertyTarget, error) {
 	if !owner.IsValid() || definitionID.IsZero() {
@@ -153,9 +158,12 @@ func (m Model) planEvaluation(targets []PropertyTarget, ctx CalculationContext, 
 		}
 		requested[d.ID()] = d
 	}
-	b := planBuilder{model: m, byID: byID, all: make(map[ID]PropertyDefinition), embedded: make(map[PropertyAddress]struct{}), entityTypes: make(map[ID]EntityType), relationTypes: make(map[ID]RelationType), scopes: make(map[ID]ScopeDefinition), functions: make(map[string]FunctionRequirement)}
+	b := planBuilder{model: m, byID: byID, all: make(map[ID]PropertyDefinition), visiting: make(map[ID]bool), embedded: make(map[PropertyAddress]struct{}), entityTypes: make(map[ID]EntityType), relationTypes: make(map[ID]RelationType), scopes: make(map[ID]ScopeDefinition), functions: make(map[string]FunctionRequirement)}
 	for _, d := range sortedDefinitions(requested) {
 		b.walkDefinition(d)
+	}
+	if b.err != nil {
+		return DependencyPlan{}, b.err
 	}
 	// A supplied CalculationContext selects among dependencies already present
 	// in this conservative model-level plan. Scenario overrides are runtime
@@ -185,12 +193,30 @@ type planBuilder struct {
 	functions     map[string]FunctionRequirement
 	traversals    []TraversalRequirement
 	temporal      bool
+	depth         int
+	err           error
 }
 
 func (b *planBuilder) walkDefinition(d PropertyDefinition) {
+	if b.err != nil {
+		return
+	}
 	if _, seen := b.all[d.ID()]; seen {
 		return
 	}
+	if b.visiting[d.ID()] {
+		return
+	}
+	if b.depth >= MaxDependencyPlanDepth {
+		b.err = fmt.Errorf("%w: dependency plan exceeds depth %d", ErrInvalidModel, MaxDependencyPlanDepth)
+		return
+	}
+	b.visiting[d.ID()] = true
+	b.depth++
+	defer func() {
+		b.depth--
+		delete(b.visiting, d.ID())
+	}()
 	b.all[d.ID()] = d
 	if d.Owner().Kind() == PropertyOwnerEntityType {
 		for _, e := range b.model.EntityTypeDefinitions() {
@@ -298,8 +324,8 @@ func (b *planBuilder) walkStatic(expression ast.Expression) {
 			ref, _ := requirement.Function()
 			public := functionRefFromInternal(ref)
 			for _, candidate := range b.model.FunctionRequirements() {
-				if candidate.Ref().String() == public.String() {
-					b.functions[public.String()] = candidate
+				if candidate.Ref().key() == public.key() {
+					b.functions[public.key()] = candidate
 				}
 			}
 		}
@@ -403,7 +429,7 @@ func sortedFunctionRequirements(in map[string]FunctionRequirement) []FunctionReq
 	for _, v := range in {
 		out = append(out, v)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Ref().String() < out[j].Ref().String() })
+	sort.Slice(out, func(i, j int) bool { return out[i].Ref().key() < out[j].Ref().key() })
 	return out
 }
 

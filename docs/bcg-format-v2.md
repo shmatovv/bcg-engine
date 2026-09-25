@@ -21,6 +21,10 @@ Declarations sort by stable UUID, never display name. Enum options sort by UUID 
 ## Validation and compatibility
 
 Input is untrusted: duplicate keys, unknown fields/nodes, invalid IDs, enums, functions, cardinality, values, dangling declarations, invalid scenarios, JSON nesting and AST depth are rejected. Documents are limited to 64 MiB.
+JSON nesting is capped at 2,048 and expression depth at 512. An Enum has at
+most 4,096 options, a composite key at most 64 components, and a function
+signature or call at most 1,024 arguments. Unsupported newer format or engine
+compatibility values fail explicitly; decoders never infer a version.
 
 V1 retains its historical meaning: no enums, keys, invariants, or function requirements; optional input presence; and `0..unbounded` relation cardinalities. Re-encoding v1 reads is v2 and preserves semantics, not bytes.
 

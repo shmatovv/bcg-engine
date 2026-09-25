@@ -19,6 +19,11 @@ import (
 // SemanticVersion is an exact portable extension-function version.
 type SemanticVersion struct{ major, minor, patch uint32 }
 
+// MaxFunctionArguments is the maximum signature and call arity accepted by
+// Engine v2. It bounds host-controlled allocation during artifact decode; it
+// is not a business-language recommendation.
+const MaxFunctionArguments = internalfunction.MaxArguments
+
 func NewSemanticVersion(major, minor, patch uint32) SemanticVersion {
 	return SemanticVersion{major, minor, patch}
 }
@@ -151,6 +156,9 @@ func functionValueTypeFromInternal(value typing.Type) FunctionValueType {
 type FunctionSignature struct{ value internalfunction.Signature }
 
 func NewFunctionSignature(parameters []ValueType, result ValueType, nullable bool) (FunctionSignature, error) {
+	if len(parameters) > MaxFunctionArguments {
+		return FunctionSignature{}, fmt.Errorf("%w: function parameter count exceeds %d", ErrInvalidArgument, MaxFunctionArguments)
+	}
 	parameterContracts := make([]FunctionValueType, len(parameters))
 	for index, parameter := range parameters {
 		parameterContracts[index] = simpleFunctionValueType(parameter)
@@ -165,6 +173,9 @@ func NewFunctionSignature(parameters []ValueType, result ValueType, nullable boo
 	return NewQualifiedFunctionSignature(parameterContracts, resultContract, nullable)
 }
 func NewQualifiedFunctionSignature(parameters []FunctionValueType, result FunctionValueType, nullable bool) (FunctionSignature, error) {
+	if len(parameters) > MaxFunctionArguments {
+		return FunctionSignature{}, fmt.Errorf("%w: function parameter count exceeds %d", ErrInvalidArgument, MaxFunctionArguments)
+	}
 	internalParameters := make([]typing.Type, len(parameters))
 	for index, parameter := range parameters {
 		value, err := parameter.internal()

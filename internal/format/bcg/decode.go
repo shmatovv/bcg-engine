@@ -506,6 +506,9 @@ func (w wireEnumDefinition) toDomain(path string) (schema.EnumDefinition, error)
 	if e != nil {
 		return schema.EnumDefinition{}, e
 	}
+	if len(w.Options) == 0 || len(w.Options) > schema.MaxEnumOptions {
+		return schema.EnumDefinition{}, wireError(path+".options", fmt.Sprintf("option count must be between 1 and %d", schema.MaxEnumOptions))
+	}
 	opts := make([]schema.EnumOption, len(w.Options))
 	for i, o := range w.Options {
 		x, e := parseUUID(o.ID, fmt.Sprintf("%s.options[%d].id", path, i))
@@ -524,6 +527,9 @@ func (w wireEntityKey) toDomain(path string) (schema.EntityKeyDefinition, error)
 	et, e := parseUUID(w.EntityTypeID, path+".entityTypeId")
 	if e != nil {
 		return schema.EntityKeyDefinition{}, e
+	}
+	if len(w.PropertyDefinitionIDs) == 0 || len(w.PropertyDefinitionIDs) > schema.MaxEntityKeyComponents {
+		return schema.EntityKeyDefinition{}, wireError(path+".propertyDefinitionIds", fmt.Sprintf("component count must be between 1 and %d", schema.MaxEntityKeyComponents))
 	}
 	ps, e := parseIDs(w.PropertyDefinitionIDs, path+".propertyDefinitionIds")
 	if e != nil {
@@ -579,6 +585,9 @@ func (w wireFunctionRequirement) toDomain(path string) (function.Requirement, er
 	ref, e := function.NewRef(w.Ref.Namespace, w.Ref.Name, function.Version{Major: w.Ref.Major, Minor: w.Ref.Minor, Patch: w.Ref.Patch})
 	if e != nil {
 		return function.Requirement{}, wireError(path+".ref", "invalid function ref")
+	}
+	if len(w.Parameters) > function.MaxArguments {
+		return function.Requirement{}, wireError(path+".parameters", fmt.Sprintf("parameter count exceeds %d", function.MaxArguments))
 	}
 	ps := make([]typing.Type, len(w.Parameters))
 	for i, x := range w.Parameters {
@@ -1565,6 +1574,9 @@ func (item wireExpression) toDomain(path string, depth int) (ast.Expression, err
 	case "function_call":
 		if !item.only("function", "arguments") || item.Function == nil {
 			return nil, wireError(path, "function_call requires function and arguments")
+		}
+		if len(item.Arguments) > function.MaxArguments {
+			return nil, wireError(path+".arguments", fmt.Sprintf("argument count exceeds %d", function.MaxArguments))
 		}
 		ref, e := function.NewRef(item.Function.Namespace, item.Function.Name, function.Version{Major: item.Function.Major, Minor: item.Function.Minor, Patch: item.Function.Patch})
 		if e != nil {

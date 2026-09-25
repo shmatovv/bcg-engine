@@ -87,8 +87,11 @@ func TestSchemaV2PublicAuthoringAndV2WireRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	enums := committed.EnumDefinitions()
-	if len(enums) != 1 || len(enums[0].Options()) != 2 || enums[0].Options()[1].ID() != closedID {
+	if len(enums) != 1 || len(enums[0].Options()) != 2 {
 		t.Fatalf("enum inspection lost semantic identity: %#v", enums)
+	}
+	if option, ok := enums[0].Option(closedID); !ok || option.ID() != closedID {
+		t.Fatalf("enum inspection lost option identity: %#v", enums)
 	}
 	definitions := committed.PropertyDefinitionDeclarations()
 	if got, ok := definitions[0].EnumDefinitionID(); !ok || got != enumID {

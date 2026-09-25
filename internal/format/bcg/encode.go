@@ -224,9 +224,9 @@ func semanticRecords(w wireVersion) ([]semanticRecord, error) {
 		r = append(r, semanticRecord{kind: "ValueBinding", key: string(b), value: x})
 	}
 	for _, x := range w.FunctionRequirements {
-		// A requirement's callable name is stable while its version/signature is
-		// its semantic content. The engine currently permits one requirement per name.
-		key := x.Ref.Namespace + "\x00" + x.Ref.Name
+		// FunctionRef identity includes its exact version. Length prefixes keep
+		// dotted namespaces and names unambiguous, matching the runtime key.
+		key := fmt.Sprintf("%d:%s%d:%s@%010d.%010d.%010d", len(x.Ref.Namespace), x.Ref.Namespace, len(x.Ref.Name), x.Ref.Name, x.Ref.Major, x.Ref.Minor, x.Ref.Patch)
 		r = append(r, semanticRecord{kind: "FunctionRequirement", key: key, value: x})
 	}
 	return r, nil

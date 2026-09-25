@@ -104,8 +104,11 @@ func decodeDataset(m Model, b []byte) (DatasetArtifact, error) {
 	if err := json.Unmarshal(b, &d); err != nil {
 		return DatasetArtifact{}, fmt.Errorf("%w: malformed .bcgd: %v", ErrMalformedArtifact, err)
 	}
-	if d.FormatVersion != DatasetFormatVersion || d.EngineCompatibility != DatasetEngineCompatibility {
-		return DatasetArtifact{}, fmt.Errorf("%w: unsupported .bcgd format", ErrMalformedArtifact)
+	if d.FormatVersion != DatasetFormatVersion {
+		return DatasetArtifact{}, fmt.Errorf("%w: .bcgd format version %d is unsupported", ErrUnsupportedFormat, d.FormatVersion)
+	}
+	if d.EngineCompatibility != DatasetEngineCompatibility {
+		return DatasetArtifact{}, fmt.Errorf("%w: .bcgd engine compatibility %q is unsupported", ErrIncompatibleEngine, d.EngineCompatibility)
 	}
 	id, e := ParseID(d.DatasetID)
 	if e != nil {
@@ -131,7 +134,7 @@ func decodeDataset(m Model, b []byte) (DatasetArtifact, error) {
 	}
 	v, e := formatbcg.UnmarshalDatasetContent(m.version, id.value, d.Content)
 	if e != nil {
-		return DatasetArtifact{}, publicError(e)
+		return DatasetArtifact{}, publicDatasetError(e)
 	}
 	ds := Dataset{value: v, modelDigest: md}
 	if ds.ContentDigest() != cd {

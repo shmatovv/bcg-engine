@@ -13,6 +13,14 @@ import (
 	"github.com/shmatovv/bcg-engine/v2/internal/runtime"
 )
 
+// MaxEnumOptions is the host-safety limit for one EnumDefinition. It is not
+// a recommended business taxonomy size.
+const MaxEnumOptions = schema.MaxEnumOptions
+
+// MaxEntityKeyComponents is the host-safety limit for one composite business
+// key. Component order remains semantically significant below this bound.
+const MaxEntityKeyComponents = schema.MaxEntityKeyComponents
+
 // EnumOptionSpec describes a stable named enum option.
 type EnumOptionSpec struct {
 	ID   ID
@@ -36,6 +44,9 @@ func NewEnumDefinition(spec EnumDefinitionSpec) (EnumDefinition, error) {
 	if err != nil {
 		return EnumDefinition{}, err
 	}
+	if len(spec.Options) == 0 || len(spec.Options) > MaxEnumOptions {
+		return EnumDefinition{}, invalidSchemaArgument("enum definition option count is outside the supported limit")
+	}
 	opts := make([]schema.EnumOption, len(spec.Options))
 	seen := map[ID]bool{}
 	for i, o := range spec.Options {
@@ -47,9 +58,6 @@ func NewEnumDefinition(spec EnumDefinitionSpec) (EnumDefinition, error) {
 		}
 		seen[o.ID] = true
 		opts[i] = schema.NewEnumOption(o.ID.value, o.Name)
-	}
-	if len(opts) == 0 {
-		return EnumDefinition{}, invalidSchemaArgument("enum definition requires an option")
 	}
 	return EnumDefinition{schema.NewEnumDefinition(id, spec.Name, opts)}, nil
 }
@@ -69,6 +77,12 @@ func (e EnumDefinition) Option(id ID) (EnumOption, bool) {
 }
 func (e EnumDefinition) IsValid() bool { return e.value.IsValid() }
 
+func sortedPublicSchemaIDs(ids []identity.UUID) []ID {
+	result := publicSchemaIDs(ids)
+	sort.Slice(result, func(i, j int) bool { return result[i].String() < result[j].String() })
+	return result
+}
+
 // EntityKeyDefinition represents business uniqueness for one EntityType.
 type EntityKeyDefinitionSpec struct {
 	ID                    ID
@@ -86,6 +100,9 @@ func NewEntityKeyDefinition(spec EntityKeyDefinitionSpec) (EntityKeyDefinition, 
 	et, err := requiredSchemaID(spec.EntityTypeID, "entity key entity type ID")
 	if err != nil {
 		return EntityKeyDefinition{}, err
+	}
+	if len(spec.PropertyDefinitionIDs) == 0 || len(spec.PropertyDefinitionIDs) > MaxEntityKeyComponents {
+		return EntityKeyDefinition{}, invalidSchemaArgument("entity key component count is outside the supported limit")
 	}
 	p, err := schemaIDs(spec.PropertyDefinitionIDs, "entity key property definition")
 	if err != nil {

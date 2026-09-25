@@ -31,6 +31,10 @@ var (
 	// ErrScenarioValidation identifies an artifact Scenario that is invalid for
 	// its embedded Model version.
 	ErrScenarioValidation = formatbcg.ErrScenarioValidation
+	// ErrDatasetValidation identifies a Dataset that fails structural
+	// validation against its committed Model. Use errors.As with
+	// ValidationError for the deterministic issue list.
+	ErrDatasetValidation = errors.New("bcg: dataset validation failed")
 	// ErrInvalidArgument identifies an invalid public API value or zero facade.
 	ErrInvalidArgument = errors.New("bcg: invalid argument")
 	// ErrInvalidModel identifies an invalid public Model or Artifact wrapper.
@@ -167,6 +171,24 @@ func publicError(err error) error {
 		return &EngineError{kind: resolved.Kind().String(), cause: err}
 	}
 	return err
+}
+
+// publicDatasetError retains the normal public ValidationError projection
+// while preserving the Dataset-specific stable error category required by the
+// Dataset API. Model and Dataset validation use the same issue vocabulary,
+// but callers must still be able to tell which construction boundary failed.
+func publicDatasetError(err error) error {
+	if err == nil {
+		return nil
+	}
+	var report model.ValidationReport
+	if errors.As(err, &report) {
+		return &ValidationError{
+			cause:  fmt.Errorf("%w: %w", ErrDatasetValidation, err),
+			issues: validationIssuesFromInternal(report.Issues()),
+		}
+	}
+	return publicError(err)
 }
 
 func validationReportFromInternal(report model.ValidationReport) ValidationReport {

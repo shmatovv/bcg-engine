@@ -5,8 +5,9 @@
 > **Runtime Dataset API.** This README documents the complete public Go API
 > for the current engine, including immutable external runtime datasets. The
 > `.bcg` wire-format contracts are documented in
-> [`docs/bcg-format-v2.md`](docs/bcg-format-v2.md) and the retained historical
-> [`docs/bcg-format-v1.md`](docs/bcg-format-v1.md).
+> [`docs/bcg-format-v2.md`](docs/bcg-format-v2.md), retained historical
+> [`docs/bcg-format-v1.md`](docs/bcg-format-v1.md), and
+> [`docs/bcgd-format-v1.md`](docs/bcgd-format-v1.md).
 
 <a id="english-reference"></a>
 
@@ -25,8 +26,10 @@ lossless inspection and Schema v2 declarations: UUID-identified Enums, Input
 presence policies, Entity keys, directional Relation cardinality, and
 subject-relative Invariants. Extension functions are represented by portable
 requirements and calls. Dataset patches/rebases, evaluation dependency
-planning, and batch evaluation are available; final v2 hardening and API freeze
-remain deferred.
+planning, and batch evaluation are available. See the
+[migration guide](docs/engine-v2-migration.md), [extension-function guide](docs/extension-functions.md),
+[semantic-evolution guide](docs/semantic-evolution.md), [Dataset Patch/Rebase guide](docs/dataset-patch-rebase.md),
+and the compilable [external public example](examples/public-v2/).
 
 Expression v2 currently adds deterministic state predicates (`IsDefined`,
 `IsUndefined`, `IsNull`), exact numeric transforms (`Abs`, `Round`, `Floor`,
@@ -186,8 +189,9 @@ returns per-change and aggregate `EvolutionEffect` flags such as
 
 Evolution analysis is static: it does not migrate data and does not inspect a
 Dataset. In particular, `PotentialDataLoss` is a schema-risk classification,
-not evidence that any concrete record will be lost. Dataset-aware compatibility
-and rebase are separate future work. `model.SemanticDigest()` is SHA-256 over
+not evidence that any concrete record will be lost. `Dataset.Rebase` is the
+separate, concrete compatibility check for existing runtime content; it is not
+a data migration. `model.SemanticDigest()` is SHA-256 over
 a canonical semantic projection; it excludes version ID, parent version ID,
 version label, and diagnostic names, while including schema, ASTs, units,
 keys, cardinality, declarations, bindings, and function requirements.
@@ -206,6 +210,18 @@ the prior Dataset is never changed and remove operations do not cascade.
 concrete runtime content under a compatible logical model and creates a newly
 bound Dataset only when its structural representation remains valid. Rebase is
 not migration: it neither coerces values nor invents, removes, or rewrites data.
+
+## Host-safety limits
+
+The engine rejects malformed or excessive inputs before recursive evaluation or
+unbounded collection allocation. The limits are safety ceilings, not business
+rules: expression/evaluation/provenance depth is 512; `.bcg`/`.bcgd` decoded
+document size is 64 MiB; JSON nesting is 2,048; a function call or signature
+has at most 1,024 arguments; an Enum has at most 4,096 options; an Entity key
+has at most 64 components; and dependency-plan traversal is capped at 4,096
+frames. These values are exercised by boundary regression tests and fuzz smoke
+tests. Hosts should still set ordinary request-size and execution-time limits
+at their trust boundary; native extension callbacks are not sandboxed.
 
 ## Authoring primitives
 

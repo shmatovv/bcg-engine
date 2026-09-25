@@ -63,8 +63,15 @@ func (d *Draft) validateV2Schema(report *ValidationReport) {
 				report.append(newRelatedValidationIssue(ValidationIssueUnknownPropertyDefinition, k.ID(), pid, "key references unknown property"))
 				continue
 			}
-			if p.Owner() != schema.EntityTypeOwner(et.ID()) || p.Computation().Kind() != schema.ComputationInput || p.TemporalMode() != schema.TemporalScalar {
-				report.append(newRelatedValidationIssue(ValidationIssueUnsupportedSchemaCombination, k.ID(), pid, "key property must be an input scalar of its entity type"))
+			presence, isInput := p.Computation().Presence()
+			nullable := false
+			if contractID, hasContract := p.ContractID(); hasContract {
+				if contract, exists := findPropertyContract(d, contractID); exists {
+					nullable = contract.Nullable()
+				}
+			}
+			if p.Owner() != schema.EntityTypeOwner(et.ID()) || !isInput || presence != schema.PresenceRequired || p.TemporalMode() != schema.TemporalScalar || nullable {
+				report.append(newRelatedValidationIssue(ValidationIssueUnsupportedSchemaCombination, k.ID(), pid, "key property must be a required, non-nullable scalar input of its entity type"))
 			}
 		}
 	}
@@ -128,4 +135,13 @@ func findPropertyDefinition(d *Draft, id identity.UUID) (schema.PropertyDefiniti
 		}
 	}
 	return schema.PropertyDefinition{}, false
+}
+
+func findPropertyContract(d *Draft, id identity.UUID) (schema.PropertyContract, bool) {
+	for _, v := range d.propertyContracts {
+		if v.ID() == id {
+			return v, true
+		}
+	}
+	return schema.PropertyContract{}, false
 }

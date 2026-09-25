@@ -16,7 +16,7 @@ const FormatVersion = formatbcg.FormatVersion
 
 // EngineCompatibility identifies the semantic engine generation supported by
 // this public facade. It is not a source-control revision.
-const EngineCompatibility = formatbcg.EngineCompatibilityV1
+const EngineCompatibility = formatbcg.EngineCompatibilityV2
 
 // Artifact is one portable committed Model and its optional immutable Scenario overlays.
 type Artifact struct{ value formatbcg.Artifact }

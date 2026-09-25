@@ -16,3 +16,9 @@ semantic digest must both match. Decoded runtime content is structurally
 validated against that model and its content digest is verified. No schema,
 model declarations, scenarios, functions, callback implementations, caches,
 or runtime state are serialized.
+
+Input is strict canonical JSON: duplicate/unknown fields, trailing content,
+invalid typed values, excessive nesting, malformed content, unsupported format
+versions, and incompatible engine values fail clearly. `.bcgd` input is
+limited to 64 MiB before decode so an artifact cannot request unbounded
+allocation from a host.

@@ -2,6 +2,11 @@ package schema
 
 import "github.com/shmatovv/bcg-engine/v2/internal/domain/identity"
 
+// MaxEntityKeyComponents bounds a composite key at the schema boundary. It
+// prevents hostile artifacts from turning uniqueness checks into oversized
+// per-record allocations while remaining far above ordinary business keys.
+const MaxEntityKeyComponents = 64
+
 type EntityKeyDefinition struct {
 	id                    identity.UUID
 	name                  string
@@ -10,7 +15,7 @@ type EntityKeyDefinition struct {
 }
 
 func NewEntityKeyDefinition(id identity.UUID, name string, entityTypeID identity.UUID, propertyDefinitionIDs []identity.UUID) EntityKeyDefinition {
-	if id.IsZero() || name == "" || entityTypeID.IsZero() || len(propertyDefinitionIDs) == 0 {
+	if id.IsZero() || name == "" || entityTypeID.IsZero() || len(propertyDefinitionIDs) == 0 || len(propertyDefinitionIDs) > MaxEntityKeyComponents {
 		panic("schema: invalid entity key")
 	}
 	seen := map[identity.UUID]struct{}{}
@@ -34,7 +39,7 @@ func (d EntityKeyDefinition) PropertyDefinitionIDs() []identity.UUID {
 	return append([]identity.UUID(nil), d.propertyDefinitionIDs...)
 }
 func (d EntityKeyDefinition) IsValid() bool {
-	if d.id.IsZero() || d.name == "" || d.entityTypeID.IsZero() || len(d.propertyDefinitionIDs) == 0 {
+	if d.id.IsZero() || d.name == "" || d.entityTypeID.IsZero() || len(d.propertyDefinitionIDs) == 0 || len(d.propertyDefinitionIDs) > MaxEntityKeyComponents {
 		return false
 	}
 	seen := map[identity.UUID]struct{}{}

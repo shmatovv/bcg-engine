@@ -10,6 +10,11 @@ import (
 	"github.com/shmatovv/bcg-engine/v2/internal/expression/typing"
 )
 
+// MaxArguments bounds portable function signatures and call nodes. It is a
+// generous host-safety guard against hostile artifact allocation, not a
+// modelling arity recommendation.
+const MaxArguments = 1024
+
 // Version is an exact semantic function version. Compatibility is exact, not
 // major-version based.
 type Version struct{ Major, Minor, Patch uint32 }
@@ -60,6 +65,9 @@ type Signature struct {
 }
 
 func NewSignature(parameters []typing.Type, result typing.Type, nullable bool) (Signature, error) {
+	if len(parameters) > MaxArguments {
+		return Signature{}, fmt.Errorf("function: parameter count exceeds %d", MaxArguments)
+	}
 	if !validFunctionType(result) {
 		return Signature{}, fmt.Errorf("function: invalid result type")
 	}
@@ -76,7 +84,7 @@ func (s Signature) Parameters() []typing.Type { return append([]typing.Type(nil)
 func (s Signature) Result() typing.Type       { return s.result }
 func (s Signature) NullableResult() bool      { return s.nullable }
 func (s Signature) IsValid() bool {
-	if !validFunctionType(s.result) {
+	if !validFunctionType(s.result) || len(s.parameters) > MaxArguments {
 		return false
 	}
 	for _, parameter := range s.parameters {
