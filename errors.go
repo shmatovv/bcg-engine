@@ -36,6 +36,9 @@ var (
 	// ErrInvalidModel identifies an invalid public Model or Artifact wrapper.
 	ErrInvalidModel        = errors.New("bcg: invalid model")
 	ErrIncompatibleRuntime = errors.New("bcg: incompatible runtime")
+	// ErrDifferentLogicalModel identifies a comparison between versions that do
+	// not belong to the same long-lived ModelID.
+	ErrDifferentLogicalModel = errors.New("bcg: different logical model")
 	// ErrFunctionExecution identifies a host extension callback error.
 	ErrFunctionExecution = errors.New("bcg: function execution failed")
 	// ErrFunctionPanic identifies a recovered extension callback panic.

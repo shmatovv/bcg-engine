@@ -24,8 +24,8 @@ reads `.bcg v1` and writes canonical `.bcg v2` while adding public
 lossless inspection and Schema v2 declarations: UUID-identified Enums, Input
 presence policies, Entity keys, directional Relation cardinality, and
 subject-relative Invariants. Extension functions are represented by portable
-requirements and calls; dataset patches/rebases, model evolution, and
-dependency planning remain deferred.
+requirements and calls. Dataset patches/rebases and dependency planning remain
+deferred.
 
 Expression v2 currently adds deterministic state predicates (`IsDefined`,
 `IsUndefined`, `IsNull`), exact numeric transforms (`Abs`, `Round`, `Floor`,
@@ -145,6 +145,24 @@ Draft, validate, and commit with a new version UUID. The new Model has the
 source version as its parent; the source Model is unchanged.
 `NewArtifact(committed, scenarios...)` accepts only Scenarios compatible with
 that exact committed version.
+
+## Model evolution and semantic identity
+
+`CompareModels(oldModel, newModel)` compares two committed versions of the
+same logical `ModelID`. It returns deterministic `ModelChange` values keyed by
+stable declaration IDs (or a compound identity for bindings/requirements), so
+a rename is a modification rather than a remove/add pair. `AnalyzeEvolution`
+returns per-change and aggregate `EvolutionEffect` flags such as
+`RequiresRecalculation`, `RequiresIntegrityRecheck`,
+`PotentialDataMigration`, and `PotentialDataLoss`.
+
+Evolution analysis is static: it does not migrate data and does not inspect a
+Dataset. In particular, `PotentialDataLoss` is a schema-risk classification,
+not evidence that any concrete record will be lost. Dataset-aware compatibility
+and rebase are separate future work. `model.SemanticDigest()` is SHA-256 over
+a canonical semantic projection; it excludes version ID, parent version ID,
+version label, and diagnostic names, while including schema, ASTs, units,
+keys, cardinality, declarations, bindings, and function requirements.
 
 ## Authoring primitives
 

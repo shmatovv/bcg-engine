@@ -3,6 +3,7 @@ package bcg
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
 	"sort"
 	"strconv"
 
@@ -27,12 +28,255 @@ import (
 	"github.com/shmatovv/bcg-engine/v2/internal/types/value"
 )
 
+// SemanticChange is an internal-format neutral description of one changed
+// persistent declaration.  Values are compared as typed wire DTOs, never by
+// their JSON representation.  Key is used only for declarations without a
+// UUID (bindings and function requirements).
+type SemanticChange struct {
+	Kind        string
+	ID          string
+	Key         string
+	Operation   string
+	Fields      []string
+	OldFeatures []string
+	NewFeatures []string
+}
+
 func marshalCanonical(document wireDocument) ([]byte, error) {
 	data, err := json.Marshal(document)
 	if err != nil {
 		return nil, fmt.Errorf("%w: marshal canonical JSON: %w", ErrWireSemantic, err)
 	}
 	return data, nil
+}
+
+// SemanticProjection returns canonical model semantics without lifecycle and
+// diagnostic metadata. It is deliberately separate from Artifact wire bytes.
+func SemanticProjection(version model.ModelVersion) ([]byte, error) {
+	w, err := wireVersionFromDomain(version)
+	if err != nil {
+		return nil, err
+	}
+	w.ID, w.ModelID, w.Label, w.ParentVersionID = "", "", "", nil
+	for i := range w.EntityTypes {
+		w.EntityTypes[i].Name = ""
+	}
+	for i := range w.RelationTypes {
+		w.RelationTypes[i].Name = ""
+	}
+	for i := range w.Traits {
+		w.Traits[i].Name = ""
+	}
+	for i := range w.Contracts {
+		w.Contracts[i].Name = ""
+	}
+	for i := range w.Properties {
+		w.Properties[i].Name = ""
+	}
+	for i := range w.Scopes {
+		w.Scopes[i].Name = ""
+	}
+	for i := range w.Entities {
+		w.Entities[i].Name = nil
+	}
+	for i := range w.EnumDefinitions {
+		w.EnumDefinitions[i].Name = ""
+		for j := range w.EnumDefinitions[i].Options {
+			w.EnumDefinitions[i].Options[j].Name = ""
+		}
+	}
+	for i := range w.EntityKeys {
+		w.EntityKeys[i].Name = ""
+	}
+	for i := range w.Invariants {
+		w.Invariants[i].Name = ""
+	}
+	for i := range w.Constraints {
+		w.Constraints[i].Name = ""
+	}
+	for i := range w.Rules {
+		w.Rules[i].Name = ""
+		w.Rules[i].Metadata = nil
+	}
+	return json.Marshal(w)
+}
+
+// CompareSemanticVersions compares every persistent declaration in two
+// committed model snapshots. It deliberately reuses the canonical wire DTOs:
+// they are lossless, typed semantic values, and already normalize unordered
+// collections. JSON is used only to derive stable keys for UUID-less bindings.
+func CompareSemanticVersions(oldVersion, newVersion model.ModelVersion) ([]SemanticChange, error) {
+	oldWire, err := wireVersionFromDomain(oldVersion)
+	if err != nil {
+		return nil, err
+	}
+	newWire, err := wireVersionFromDomain(newVersion)
+	if err != nil {
+		return nil, err
+	}
+	oldRecords, err := semanticRecords(oldWire)
+	if err != nil {
+		return nil, err
+	}
+	newRecords, err := semanticRecords(newWire)
+	if err != nil {
+		return nil, err
+	}
+	oldByKey := make(map[string]semanticRecord, len(oldRecords))
+	newByKey := make(map[string]semanticRecord, len(newRecords))
+	keys := make([]string, 0, len(oldRecords)+len(newRecords))
+	for _, r := range oldRecords {
+		oldByKey[r.mapKey()] = r
+		keys = append(keys, r.mapKey())
+	}
+	for _, r := range newRecords {
+		if _, ok := oldByKey[r.mapKey()]; !ok {
+			keys = append(keys, r.mapKey())
+		}
+		newByKey[r.mapKey()] = r
+	}
+	sort.Strings(keys)
+	changes := make([]SemanticChange, 0)
+	for _, key := range keys {
+		o, oldOK := oldByKey[key]
+		n, newOK := newByKey[key]
+		if !oldOK {
+			changes = append(changes, SemanticChange{Kind: n.kind, ID: n.id, Key: n.key, Operation: "Added", NewFeatures: semanticFeatures(n.value)})
+			continue
+		}
+		if !newOK {
+			changes = append(changes, SemanticChange{Kind: o.kind, ID: o.id, Key: o.key, Operation: "Removed", OldFeatures: semanticFeatures(o.value)})
+			continue
+		}
+		if reflect.DeepEqual(o.value, n.value) {
+			continue
+		}
+		changes = append(changes, SemanticChange{Kind: o.kind, ID: o.id, Key: o.key, Operation: "Modified", Fields: semanticFields(o.value, n.value), OldFeatures: semanticFeatures(o.value), NewFeatures: semanticFeatures(n.value)})
+	}
+	return changes, nil
+}
+
+type semanticRecord struct {
+	kind, id, key string
+	value         any
+}
+
+func (r semanticRecord) mapKey() string { return r.kind + "\x00" + r.id + "\x00" + r.key }
+
+func semanticRecords(w wireVersion) ([]semanticRecord, error) {
+	r := make([]semanticRecord, 0)
+	add := func(kind, id string, value any) { r = append(r, semanticRecord{kind: kind, id: id, value: value}) }
+	r = append(r, semanticRecord{kind: "PrecisionPolicy", key: "model", value: w.Precision})
+	for _, x := range w.EntityTypes {
+		add("EntityType", x.ID, x)
+	}
+	for _, x := range w.EnumDefinitions {
+		y := x
+		y.Options = nil
+		add("EnumDefinition", x.ID, y)
+		for _, option := range x.Options {
+			add("EnumOption", option.ID, struct {
+				DefinitionID string
+				Option       wireEnumOption
+			}{x.ID, option})
+		}
+	}
+	for _, x := range w.EntityKeys {
+		add("EntityKeyDefinition", x.ID, x)
+	}
+	for _, x := range w.RelationTypes {
+		add("RelationType", x.ID, x)
+	}
+	for _, x := range w.Traits {
+		add("Trait", x.ID, x)
+	}
+	for _, x := range w.Contracts {
+		add("PropertyContract", x.ID, x)
+	}
+	for _, x := range w.Properties {
+		add("PropertyDefinition", x.ID, x)
+	}
+	for _, x := range w.Scopes {
+		add("ScopeDefinition", x.ID, x)
+	}
+	for _, x := range w.Entities {
+		add("Entity", x.ID, x)
+	}
+	for _, x := range w.Relations {
+		add("Relation", x.ID, x)
+	}
+	for _, x := range w.Constraints {
+		add("Constraint", x.ID, x)
+	}
+	for _, x := range w.Rules {
+		add("Rule", x.ID, x)
+	}
+	for _, x := range w.Invariants {
+		add("Invariant", x.ID, x)
+	}
+	for _, x := range w.Bindings {
+		identity := x
+		identity.Value = wireBindingValue{}
+		b, err := json.Marshal(identity)
+		if err != nil {
+			return nil, err
+		}
+		r = append(r, semanticRecord{kind: "ValueBinding", key: string(b), value: x})
+	}
+	for _, x := range w.FunctionRequirements {
+		// A requirement's callable name is stable while its version/signature is
+		// its semantic content. The engine currently permits one requirement per name.
+		key := x.Ref.Namespace + "\x00" + x.Ref.Name
+		r = append(r, semanticRecord{kind: "FunctionRequirement", key: key, value: x})
+	}
+	return r, nil
+}
+
+func semanticFields(oldValue, newValue any) []string {
+	o, n := reflect.ValueOf(oldValue), reflect.ValueOf(newValue)
+	if o.Kind() != reflect.Struct || n.Kind() != reflect.Struct || o.Type() != n.Type() {
+		return []string{"Semantic"}
+	}
+	fields := make([]string, 0)
+	semanticFieldValues(o, n, "", &fields)
+	return fields
+}
+
+func semanticFieldValues(oldValue, newValue reflect.Value, prefix string, fields *[]string) {
+	for i := 0; i < oldValue.NumField(); i++ {
+		o, n := oldValue.Field(i), newValue.Field(i)
+		if reflect.DeepEqual(o.Interface(), n.Interface()) {
+			continue
+		}
+		name := prefix + oldValue.Type().Field(i).Name
+		if o.Kind() == reflect.Struct && n.Kind() == reflect.Struct {
+			semanticFieldValues(o, n, name+".", fields)
+			continue
+		}
+		*fields = append(*fields, name)
+	}
+}
+
+func semanticFeatures(value any) []string {
+	features := []string{}
+	switch v := value.(type) {
+	case wireProperty:
+		if v.Computation.Kind == "input" {
+			features = append(features, "input", "presence:"+v.Computation.Presence)
+		}
+		if v.Computation.Kind == "derived" {
+			features = append(features, "derived")
+		}
+	case wireRelationType:
+		features = append(features, "outgoing:"+v.OutgoingCardinality.Min, "incoming:"+v.IncomingCardinality.Min)
+		if v.OutgoingCardinality.Max != nil {
+			features = append(features, "outgoing-max:"+*v.OutgoingCardinality.Max)
+		}
+		if v.IncomingCardinality.Max != nil {
+			features = append(features, "incoming-max:"+*v.IncomingCardinality.Max)
+		}
+	}
+	return features
 }
 
 func newWireDocument(artifact Artifact) (wireDocument, error) {

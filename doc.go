@@ -23,6 +23,15 @@
 // Scenario is an immutable value-only overlay constructed against one
 // committed Model version.
 //
+// CompareModels returns a deterministic typed diff between committed versions
+// of the same logical Model. AnalyzeEvolution conservatively classifies the
+// semantic consequences of that diff with effect flags. It never migrates
+// data and cannot know whether a concrete Dataset contains data that would be
+// affected; PotentialDataLoss is risk, not proof. Dataset-aware compatibility
+// is intentionally a later Dataset Rebase concern. Model.SemanticDigest is a
+// SHA-256 digest of canonical semantic content, excluding version lineage and
+// diagnostic metadata.
+//
 // Dataset is an optional fully materialized immutable external data snapshot
 // bound to one exact Model version. Model.WithDataset returns an
 // EvaluationSnapshot that uses the combined graph without changing the
