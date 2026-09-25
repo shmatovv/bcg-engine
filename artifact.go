@@ -73,6 +73,20 @@ func modelHasV2OnlySemantics(model Model) bool {
 			return true
 		}
 	}
+	for _, definition := range model.PropertyDefinitionDeclarations() {
+		if expression, ok := definition.Computation().Expression(); ok {
+			unsupported := false
+			_ = WalkExpression(expression, ExpressionVisitorFunc(func(node Expression) error {
+				if node.Kind() >= ExpressionUnaryV2 {
+					unsupported = true
+				}
+				return nil
+			}))
+			if unsupported {
+				return true
+			}
+		}
+	}
 	return false
 }
 

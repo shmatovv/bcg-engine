@@ -419,6 +419,29 @@ func (e expressionExtractor) walk(
 			context,
 			dependencies,
 		)
+	case ast.Unary:
+		if !expression.IsValid() {
+			return invalidExpressionError()
+		}
+		return e.walk(expression.Operand(), context, dependencies)
+	case ast.Binary:
+		if !expression.IsValid() {
+			return invalidExpressionError()
+		}
+		if err := e.walk(expression.Left(), context, dependencies); err != nil {
+			return err
+		}
+		return e.walk(expression.Right(), context, dependencies)
+	case ast.Variadic:
+		if !expression.IsValid() {
+			return invalidExpressionError()
+		}
+		for _, child := range expression.Operands() {
+			if err := e.walk(child, context, dependencies); err != nil {
+				return err
+			}
+		}
+		return nil
 
 	default:
 		return newBuildError(

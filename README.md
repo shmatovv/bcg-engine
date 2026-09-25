@@ -25,6 +25,21 @@ presence policies, Entity keys, directional Relation cardinality, and
 subject-relative Invariants. `.bcg v2`, extension functions, dataset
 patches/rebases, model evolution, and dependency planning remain deferred.
 
+Expression v2 currently adds deterministic state predicates (`IsDefined`,
+`IsUndefined`, `IsNull`), exact numeric transforms (`Abs`, `Round`, `Floor`,
+`Ceil`, `Modulo`), Unicode string transforms (`Concat`, `Length`, `Lower`,
+`Upper`, `Trim`, `Contains`, `StartsWith`, `EndsWith`), and date/time
+component extraction. String length counts Unicode code points; casing uses
+Go's Unicode default mappings and never the machine locale. New expression
+nodes are immutable and participate in typed introspection, walking, static
+validation, execution provenance, and dependency traversal.
+
+Extension integrations use explicit immutable `FunctionRegistry` and
+`Runtime` values. A function has exact namespace/name/semantic-version
+identity and an immutable typed signature. There is no package-global
+registration: missing or incompatible implementations return
+`ErrIncompatibleRuntime` when a requirement is bound.
+
 Schema v2 declarations are in-memory model semantics for now. The v1 wire
 format is intentionally not extended: `NewArtifact` returns `ErrWireSemantic`
 for a model containing an Enum, key, invariant, required presence, non-default

@@ -120,6 +120,21 @@ func Depth(expression Expression) (int, bool) {
 			if mapExpression, hasMap := node.Map(); hasMap {
 				children = append(children, mapExpression)
 			}
+		case Unary:
+			if !node.IsValid() {
+				return 0, false
+			}
+			children = append(children, node.Operand())
+		case Binary:
+			if !node.IsValid() {
+				return 0, false
+			}
+			children = append(children, node.Left(), node.Right())
+		case Variadic:
+			if !node.IsValid() {
+				return 0, false
+			}
+			children = append(children, node.Operands()...)
 
 		default:
 			return 0, false

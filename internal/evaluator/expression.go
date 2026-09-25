@@ -450,6 +450,12 @@ func (s *evaluationState) evaluateExpression(
 			expression,
 			context,
 		)
+	case ast.Unary:
+		return s.evaluateV2Unary(expression, context)
+	case ast.Binary:
+		return s.evaluateV2Binary(expression, context)
+	case ast.Variadic:
+		return s.evaluateV2Variadic(expression, context)
 
 	default:
 		return Result{},

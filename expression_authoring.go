@@ -40,11 +40,14 @@ const (
 	ExpressionIsNull
 	ExpressionCoalesce
 	ExpressionAggregate
+	ExpressionUnaryV2
+	ExpressionBinaryV2
+	ExpressionVariadicV2
 )
 
 // IsValid reports whether k identifies a supported v1 expression node.
 func (k ExpressionKind) IsValid() bool {
-	return k >= ExpressionConstant && k <= ExpressionAggregate
+	return k >= ExpressionConstant && k <= ExpressionVariadicV2
 }
 
 // String returns the stable node name, or "Invalid".
@@ -78,6 +81,12 @@ func (k ExpressionKind) String() string {
 		return "Coalesce"
 	case ExpressionAggregate:
 		return "Aggregate"
+	case ExpressionUnaryV2:
+		return "Unary"
+	case ExpressionBinaryV2:
+		return "Binary"
+	case ExpressionVariadicV2:
+		return "Variadic"
 	default:
 		return "Invalid"
 	}
@@ -118,6 +127,12 @@ func (e Expression) Kind() ExpressionKind {
 		return ExpressionCoalesce
 	case ast.Aggregate:
 		return ExpressionAggregate
+	case ast.Unary:
+		return ExpressionUnaryV2
+	case ast.Binary:
+		return ExpressionBinaryV2
+	case ast.Variadic:
+		return ExpressionVariadicV2
 	default:
 		return 0
 	}
@@ -155,6 +170,12 @@ func (e Expression) Children() []Expression {
 		if mapped, ok := node.Map(); ok {
 			nodes = append(nodes, mapped)
 		}
+	case ast.Unary:
+		nodes = []ast.Expression{node.Operand()}
+	case ast.Binary:
+		nodes = []ast.Expression{node.Left(), node.Right()}
+	case ast.Variadic:
+		nodes = node.Operands()
 	}
 	result := make([]Expression, len(nodes))
 	for i, node := range nodes {
@@ -737,6 +758,187 @@ func Coalesce(primary, fallback Expression) (Expression, error) {
 		return Expression{}, err
 	}
 	return expressionFromInternal(ast.NewCoalesce(primaryValue, fallbackValue)), nil
+}
+
+// UnaryV2Operation identifies a v2 unary expression operation.
+type UnaryV2Operation uint8
+
+const (
+	UnaryIsDefined UnaryV2Operation = iota + 1
+	UnaryIsUndefined
+	UnaryAbs
+	UnaryRound
+	UnaryFloor
+	UnaryCeil
+	UnaryLength
+	UnaryLower
+	UnaryUpper
+	UnaryTrim
+	UnaryYear
+	UnaryMonth
+	UnaryDay
+	UnaryHour
+	UnaryMinute
+)
+
+func (u UnaryV2Operation) IsValid() bool                       { return u >= UnaryIsDefined && u <= UnaryMinute }
+func unaryV2Internal(u UnaryV2Operation) ast.UnaryOperator     { return ast.UnaryOperator(u) }
+func unaryV2FromInternal(u ast.UnaryOperator) UnaryV2Operation { return UnaryV2Operation(u) }
+
+type UnaryV2Expression struct {
+	operation UnaryV2Operation
+	operand   Expression
+}
+
+func (o UnaryV2Expression) Operation() UnaryV2Operation { return o.operation }
+func (o UnaryV2Expression) Operand() Expression         { return o.operand }
+func (e Expression) UnaryV2Operation() (UnaryV2Expression, bool) {
+	n, ok := e.value.(ast.Unary)
+	if !ok || !e.IsValid() {
+		return UnaryV2Expression{}, false
+	}
+	return UnaryV2Expression{unaryV2FromInternal(n.Operator()), expressionFromInternal(n.Operand())}, true
+}
+func unaryV2(operation UnaryV2Operation, operand Expression) (Expression, error) {
+	v, err := requiredExpression(operand, "unary operand")
+	if err != nil {
+		return Expression{}, err
+	}
+	if !operation.IsValid() {
+		return Expression{}, invalidExpressionArgument("unary operation is invalid")
+	}
+	return expressionFromInternal(ast.NewUnary(unaryV2Internal(operation), v)), nil
+}
+func IsDefined(operand Expression) (Expression, error)   { return unaryV2(UnaryIsDefined, operand) }
+func IsUndefined(operand Expression) (Expression, error) { return unaryV2(UnaryIsUndefined, operand) }
+func Abs(operand Expression) (Expression, error)         { return unaryV2(UnaryAbs, operand) }
+func Round(operand Expression) (Expression, error)       { return unaryV2(UnaryRound, operand) }
+func Floor(operand Expression) (Expression, error)       { return unaryV2(UnaryFloor, operand) }
+func Ceil(operand Expression) (Expression, error)        { return unaryV2(UnaryCeil, operand) }
+func Length(operand Expression) (Expression, error)      { return unaryV2(UnaryLength, operand) }
+func Lower(operand Expression) (Expression, error)       { return unaryV2(UnaryLower, operand) }
+func Upper(operand Expression) (Expression, error)       { return unaryV2(UnaryUpper, operand) }
+func Trim(operand Expression) (Expression, error)        { return unaryV2(UnaryTrim, operand) }
+func Year(operand Expression) (Expression, error)        { return unaryV2(UnaryYear, operand) }
+func Month(operand Expression) (Expression, error)       { return unaryV2(UnaryMonth, operand) }
+func Day(operand Expression) (Expression, error)         { return unaryV2(UnaryDay, operand) }
+func Hour(operand Expression) (Expression, error)        { return unaryV2(UnaryHour, operand) }
+func Minute(operand Expression) (Expression, error)      { return unaryV2(UnaryMinute, operand) }
+
+type BinaryV2Operation uint8
+
+const (
+	BinaryModulo BinaryV2Operation = iota + 1
+	BinaryContains
+	BinaryStartsWith
+	BinaryEndsWith
+	BinaryAddDuration
+	BinarySubtractDuration
+	BinaryDifference
+)
+
+func (b BinaryV2Operation) IsValid() bool { return b >= BinaryModulo && b <= BinaryDifference }
+
+type BinaryV2Expression struct {
+	operation   BinaryV2Operation
+	left, right Expression
+}
+
+func (o BinaryV2Expression) Operation() BinaryV2Operation { return o.operation }
+func (o BinaryV2Expression) Left() Expression             { return o.left }
+func (o BinaryV2Expression) Right() Expression            { return o.right }
+func (e Expression) BinaryV2Operation() (BinaryV2Expression, bool) {
+	n, ok := e.value.(ast.Binary)
+	if !ok || !e.IsValid() {
+		return BinaryV2Expression{}, false
+	}
+	return BinaryV2Expression{BinaryV2Operation(n.Operator()), expressionFromInternal(n.Left()), expressionFromInternal(n.Right())}, true
+}
+func binaryV2(operation BinaryV2Operation, left, right Expression) (Expression, error) {
+	l, e := requiredExpression(left, "binary left operand")
+	if e != nil {
+		return Expression{}, e
+	}
+	r, e := requiredExpression(right, "binary right operand")
+	if e != nil {
+		return Expression{}, e
+	}
+	if !operation.IsValid() {
+		return Expression{}, invalidExpressionArgument("binary operation is invalid")
+	}
+	return expressionFromInternal(ast.NewBinary(ast.BinaryOperator(operation), l, r)), nil
+}
+func Modulo(left, right Expression) (Expression, error) { return binaryV2(BinaryModulo, left, right) }
+func Contains(left, right Expression) (Expression, error) {
+	return binaryV2(BinaryContains, left, right)
+}
+func StartsWith(left, right Expression) (Expression, error) {
+	return binaryV2(BinaryStartsWith, left, right)
+}
+func EndsWith(left, right Expression) (Expression, error) {
+	return binaryV2(BinaryEndsWith, left, right)
+}
+func AddDuration(left, right Expression) (Expression, error) {
+	return binaryV2(BinaryAddDuration, left, right)
+}
+func SubtractDuration(left, right Expression) (Expression, error) {
+	return binaryV2(BinarySubtractDuration, left, right)
+}
+func Difference(left, right Expression) (Expression, error) {
+	return binaryV2(BinaryDifference, left, right)
+}
+
+type VariadicV2Operation uint8
+
+const (
+	VariadicConcat VariadicV2Operation = iota + 1
+	VariadicScalarMin
+	VariadicScalarMax
+)
+
+type VariadicV2Expression struct {
+	operation VariadicV2Operation
+	operands  []Expression
+}
+
+func (o VariadicV2Expression) Operation() VariadicV2Operation { return o.operation }
+func (o VariadicV2Expression) Operands() []Expression {
+	return append([]Expression(nil), o.operands...)
+}
+func (e Expression) VariadicV2Operation() (VariadicV2Expression, bool) {
+	n, ok := e.value.(ast.Variadic)
+	if !ok || !e.IsValid() {
+		return VariadicV2Expression{}, false
+	}
+	xs := n.Operands()
+	out := make([]Expression, len(xs))
+	for i, v := range xs {
+		out[i] = expressionFromInternal(v)
+	}
+	return VariadicV2Expression{VariadicV2Operation(n.Operator()), out}, true
+}
+func variadicV2(operation VariadicV2Operation, operands ...Expression) (Expression, error) {
+	if operation < VariadicConcat || operation > VariadicScalarMax || len(operands) == 0 {
+		return Expression{}, invalidExpressionArgument("variadic operation is invalid")
+	}
+	xs := make([]ast.Expression, len(operands))
+	for i, v := range operands {
+		x, e := requiredExpression(v, "variadic operand")
+		if e != nil {
+			return Expression{}, e
+		}
+		xs[i] = x
+	}
+	return expressionFromInternal(ast.NewVariadic(ast.VariadicOperator(operation), xs)), nil
+}
+func Concat(operands ...Expression) (Expression, error) {
+	return variadicV2(VariadicConcat, operands...)
+}
+func ScalarMin(operands ...Expression) (Expression, error) {
+	return variadicV2(VariadicScalarMin, operands...)
+}
+func ScalarMax(operands ...Expression) (Expression, error) {
+	return variadicV2(VariadicScalarMax, operands...)
 }
 
 // TraversalDirection selects outgoing, incoming, or both relation directions.

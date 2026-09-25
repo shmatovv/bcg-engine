@@ -34,7 +34,8 @@ var (
 	// ErrInvalidArgument identifies an invalid public API value or zero facade.
 	ErrInvalidArgument = errors.New("bcg: invalid argument")
 	// ErrInvalidModel identifies an invalid public Model or Artifact wrapper.
-	ErrInvalidModel = errors.New("bcg: invalid model")
+	ErrInvalidModel        = errors.New("bcg: invalid model")
+	ErrIncompatibleRuntime = errors.New("bcg: incompatible runtime")
 )
 
 // ValidationIssue is one machine-readable model validation problem.

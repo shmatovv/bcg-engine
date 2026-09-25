@@ -992,10 +992,6 @@ func evaluateNot(
 func evaluateIsNull(
 	operand enginevalue.Resolved,
 ) enginevalue.Resolved {
-	if operand.IsUndefined() {
-		return dependencyUndefined()
-	}
-
 	return boolResolved(
 		operand.IsNull(),
 	)

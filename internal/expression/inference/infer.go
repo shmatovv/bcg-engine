@@ -226,6 +226,12 @@ func Infer(
 			context,
 			resolver,
 		)
+	case ast.Unary:
+		return inferV2Unary(expression, context, resolver)
+	case ast.Binary:
+		return inferV2Binary(expression, context, resolver)
+	case ast.Variadic:
+		return inferV2Variadic(expression, context, resolver)
 
 	default:
 		return typing.Type{}, Error{
