@@ -157,25 +157,10 @@ func (m Model) planEvaluation(targets []PropertyTarget, ctx CalculationContext, 
 	for _, d := range sortedDefinitions(requested) {
 		b.walkDefinition(d)
 	}
-	if hasContext {
-		if scenario := ctx.Scenario(); scenario.IsValid() {
-			for _, override := range scenario.Overrides() {
-				if _, relevant := b.all[override.Target().DefinitionID()]; !relevant {
-					continue
-				}
-				for _, selector := range override.ScopeSelectors() {
-					for _, definition := range m.ScopeDefinitionDeclarations() {
-						if definition.ID() == selector.DefinitionID() {
-							b.scopes[definition.ID()] = definition
-						}
-					}
-				}
-				if _, ok := override.EffectivePeriod(); ok {
-					b.temporal = true
-				}
-			}
-		}
-	}
+	// A supplied CalculationContext selects among dependencies already present
+	// in this conservative model-level plan. Scenario overrides are runtime
+	// values (and can be Dataset-bound), so they neither invent Dataset object
+	// addresses nor broaden a context plan beyond PlanEvaluation.
 	p := DependencyPlan{targets: sortedDefinitions(requested), dependencies: sortedDefinitions(b.all), embedded: sortedAddresses(b.embedded), entityTypes: sortedEntityTypes(b.entityTypes), relationTypes: sortedRelationTypes(b.relationTypes), traversals: sortedTraversalRequirements(b.traversals), scopes: sortedScopes(b.scopes), temporal: b.temporal, functions: sortedFunctionRequirements(b.functions)}
 	// Requested declarations are not repeated as dependent declarations.
 	deps := p.dependencies[:0]

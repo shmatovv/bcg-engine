@@ -55,29 +55,16 @@ func (e expressionExtractor) extract(
 		e.objectOwners = make(map[address.ObjectRef]schema.PropertyOwner)
 	}
 
-	depth, valid := ast.Depth(expression)
-	if !valid {
-		return nil, newBuildError(
-			BuildErrorInvalidExpression,
-			"expression is structurally invalid",
-		)
-	}
-	if depth > ast.MaxExpressionDepth {
-		return nil, newBuildError(
-			BuildErrorInvalidExpression,
-			"expression nesting exceeds the maximum supported depth",
-		)
+	requirements, err := AnalyzeStatic(expression)
+	if err != nil {
+		return nil, newBuildError(BuildErrorInvalidExpression, err.Error())
 	}
 
 	dependencies := make(
 		map[address.PropertyAddress]struct{},
 	)
 
-	if err := e.walk(
-		expression,
-		context,
-		dependencies,
-	); err != nil {
+	if err := e.resolveRequirements(requirements, 0, context, dependencies); err != nil {
 		return nil, err
 	}
 
@@ -102,460 +89,110 @@ func (e expressionExtractor) extract(
 	return result, nil
 }
 
-func (e expressionExtractor) walk(
-	expression ast.Expression,
-	context extractionContext,
-	dependencies map[address.PropertyAddress]struct{},
-) error {
-	if expression == nil {
-		return newBuildError(
-			BuildErrorInvalidExpression,
-			"expression must not be nil",
-		)
-	}
-
-	switch expression :=
-		expression.(type) {
-
-	case ast.Constant:
-		if !expression.IsValid() {
-			return invalidExpressionError()
+// resolveRequirements performs only source-specific address resolution. The
+// AST shape and dependency semantics come solely from AnalyzeStatic.
+func (e expressionExtractor) resolveRequirements(requirements []StaticRequirement, parent uint32, context extractionContext, dependencies map[address.PropertyAddress]struct{}) error {
+	for _, requirement := range requirements {
+		if requirement.ParentTraversalID() != parent {
+			continue
 		}
-
-		return nil
-
-	case ast.SelfPropertyReference:
-		if !expression.IsValid() ||
-			!context.self.IsValid() {
-
-			return invalidReferenceError()
-		}
-
-		propertyAddress :=
-			address.NewPropertyAddress(
-				context.self,
-				expression.DefinitionID(),
-			)
-
-		if err :=
-			e.validatePropertyAddress(
-				propertyAddress,
-			); err != nil {
-
-			return err
-		}
-
-		dependencies[propertyAddress] =
-			struct{}{}
-
-		return nil
-
-	case ast.AbsolutePropertyReference:
-		if !expression.IsValid() {
-			return invalidReferenceError()
-		}
-
-		propertyAddress :=
-			expression.Address()
-
-		if err :=
-			e.validatePropertyAddress(
-				propertyAddress,
-			); err != nil {
-
-			return err
-		}
-
-		dependencies[propertyAddress] =
-			struct{}{}
-
-		return nil
-
-	case ast.BoundPropertyDefinitionReference:
-		if !expression.IsValid() {
-			return invalidReferenceError()
-		}
-
-		boundObject, err :=
-			boundObjectForTarget(
-				context,
-				expression.Target(),
-			)
-
-		if err != nil {
-			return err
-		}
-
-		propertyAddress :=
-			address.NewPropertyAddress(
-				boundObject,
-				expression.DefinitionID(),
-			)
-
-		if err :=
-			e.validatePropertyAddress(
-				propertyAddress,
-			); err != nil {
-
-			return err
-		}
-
-		dependencies[propertyAddress] =
-			struct{}{}
-
-		return nil
-
-	case ast.BoundContractPropertyReference:
-		if !expression.IsValid() {
-			return invalidReferenceError()
-		}
-
-		boundObject, err :=
-			boundObjectForTarget(
-				context,
-				expression.Target(),
-			)
-
-		if err != nil {
-			return err
-		}
-
-		owner, err :=
-			e.objectOwner(
-				boundObject,
-			)
-
-		if err != nil {
-			return err
-		}
-
-		definition, ok :=
-			e.source.ContractImplementation(
-				owner,
-				expression.ContractID(),
-			)
-
-		if !ok ||
-			!definition.IsValid() ||
-			definition.Owner() != owner {
-
-			return newBuildError(
-				BuildErrorContractImplementationNotFound,
-				"bound contract implementation could not be resolved for concrete object type",
-			)
-		}
-
-		contractID, hasContract :=
-			definition.ContractID()
-
-		if !hasContract ||
-			contractID !=
-				expression.ContractID() {
-
-			return newBuildError(
-				BuildErrorContractImplementationNotFound,
-				"resolved property definition does not implement the referenced contract",
-			)
-		}
-
-		propertyAddress :=
-			address.NewPropertyAddress(
-				boundObject,
-				definition.ID(),
-			)
-
-		if err :=
-			e.validatePropertyAddress(
-				propertyAddress,
-			); err != nil {
-
-			return err
-		}
-
-		dependencies[propertyAddress] =
-			struct{}{}
-
-		return nil
-
-	case ast.Arithmetic:
-		if !expression.IsValid() {
-			return invalidExpressionError()
-		}
-
-		if err := e.walk(
-			expression.Left(),
-			context,
-			dependencies,
-		); err != nil {
-			return err
-		}
-
-		return e.walk(
-			expression.Right(),
-			context,
-			dependencies,
-		)
-
-	case ast.Negate:
-		if !expression.IsValid() {
-			return invalidExpressionError()
-		}
-
-		return e.walk(
-			expression.Operand(),
-			context,
-			dependencies,
-		)
-
-	case ast.Comparison:
-		if !expression.IsValid() {
-			return invalidExpressionError()
-		}
-
-		if err := e.walk(
-			expression.Left(),
-			context,
-			dependencies,
-		); err != nil {
-			return err
-		}
-
-		return e.walk(
-			expression.Right(),
-			context,
-			dependencies,
-		)
-
-	case ast.Logical:
-		if !expression.IsValid() {
-			return invalidExpressionError()
-		}
-
-		if err := e.walk(
-			expression.Left(),
-			context,
-			dependencies,
-		); err != nil {
-			return err
-		}
-
-		return e.walk(
-			expression.Right(),
-			context,
-			dependencies,
-		)
-
-	case ast.Not:
-		if !expression.IsValid() {
-			return invalidExpressionError()
-		}
-
-		return e.walk(
-			expression.Operand(),
-			context,
-			dependencies,
-		)
-
-	case ast.If:
-		if !expression.IsValid() {
-			return invalidExpressionError()
-		}
-
-		if err := e.walk(
-			expression.Condition(),
-			context,
-			dependencies,
-		); err != nil {
-			return err
-		}
-
-		if err := e.walk(
-			expression.Then(),
-			context,
-			dependencies,
-		); err != nil {
-			return err
-		}
-
-		return e.walk(
-			expression.Else(),
-			context,
-			dependencies,
-		)
-
-	case ast.IsNull:
-		if !expression.IsValid() {
-			return invalidExpressionError()
-		}
-
-		return e.walk(
-			expression.Operand(),
-			context,
-			dependencies,
-		)
-
-	case ast.Coalesce:
-		if !expression.IsValid() {
-			return invalidExpressionError()
-		}
-
-		if err := e.walk(
-			expression.Primary(),
-			context,
-			dependencies,
-		); err != nil {
-			return err
-		}
-
-		return e.walk(
-			expression.Fallback(),
-			context,
-			dependencies,
-		)
-
-	case ast.Aggregate:
-		return e.walkAggregate(
-			expression,
-			context,
-			dependencies,
-		)
-	case ast.Unary:
-		if !expression.IsValid() {
-			return invalidExpressionError()
-		}
-		return e.walk(expression.Operand(), context, dependencies)
-	case ast.Binary:
-		if !expression.IsValid() {
-			return invalidExpressionError()
-		}
-		if err := e.walk(expression.Left(), context, dependencies); err != nil {
-			return err
-		}
-		return e.walk(expression.Right(), context, dependencies)
-	case ast.Variadic:
-		if !expression.IsValid() {
-			return invalidExpressionError()
-		}
-		for _, child := range expression.Operands() {
-			if err := e.walk(child, context, dependencies); err != nil {
+		switch requirement.Kind() {
+		case StaticSelfProperty:
+			if !context.self.IsValid() {
+				return invalidReferenceError()
+			}
+			if err := e.addProperty(address.NewPropertyAddress(context.self, requirement.DefinitionID()), dependencies); err != nil {
 				return err
 			}
-		}
-		return nil
-
-	case ast.FunctionCall:
-		if !expression.IsValid() {
-			return invalidExpressionError()
-		}
-		for _, child := range expression.Arguments() {
-			if err := e.walk(child, context, dependencies); err != nil {
+		case StaticAbsoluteProperty:
+			property, _ := requirement.Address()
+			if err := e.addProperty(property, dependencies); err != nil {
 				return err
 			}
+		case StaticBoundProperty:
+			bound, err := boundObjectForTarget(context, requirement.BoundTarget())
+			if err != nil {
+				return err
+			}
+			if err := e.addProperty(address.NewPropertyAddress(bound, requirement.DefinitionID()), dependencies); err != nil {
+				return err
+			}
+		case StaticBoundContract:
+			if err := e.addContractProperty(requirement, context, dependencies); err != nil {
+				return err
+			}
+		case StaticTraversal:
+			if err := e.resolveTraversal(requirements, requirement, context, dependencies); err != nil {
+				return err
+			}
+		case StaticFunction:
+			// Function implementations have no hidden data dependencies.
+		default:
+			return invalidExpressionError()
 		}
-		return nil
-
-	default:
-		return newBuildError(
-			BuildErrorInvalidExpression,
-			"unsupported expression node",
-		)
 	}
+	return nil
 }
 
-func (e expressionExtractor) walkAggregate(
-	expression ast.Aggregate,
-	context extractionContext,
-	dependencies map[address.PropertyAddress]struct{},
-) error {
-	if !expression.IsValid() {
-		return invalidExpressionError()
+func (e expressionExtractor) addProperty(property address.PropertyAddress, dependencies map[address.PropertyAddress]struct{}) error {
+	if err := e.validatePropertyAddress(property); err != nil {
+		return err
 	}
+	dependencies[property] = struct{}{}
+	return nil
+}
 
-	origin, err := traversalOrigin(context, expression.Source())
+func (e expressionExtractor) addContractProperty(requirement StaticRequirement, context extractionContext, dependencies map[address.PropertyAddress]struct{}) error {
+	bound, err := boundObjectForTarget(context, requirement.BoundTarget())
 	if err != nil {
 		return err
 	}
-
-	_, ok := e.relationType(expression.Source().RelationTypeID())
-	if !ok {
-
-		return newBuildError(
-			BuildErrorInvalidTraversal,
-			"aggregate traversal relation type could not be resolved",
-		)
-	}
-
-	items, err :=
-		e.traversalItems(
-			origin.ID(),
-			expression.Source(),
-		)
-
+	owner, err := e.objectOwner(bound)
 	if err != nil {
 		return err
 	}
+	definition, ok := e.source.ContractImplementation(owner, requirement.ContractID())
+	if !ok || !definition.IsValid() || definition.Owner() != owner {
+		return newBuildError(BuildErrorContractImplementationNotFound, "bound contract implementation could not be resolved for concrete object type")
+	}
+	contract, hasContract := definition.ContractID()
+	if !hasContract || contract != requirement.ContractID() {
+		return newBuildError(BuildErrorContractImplementationNotFound, "resolved property definition does not implement the referenced contract")
+	}
+	return e.addProperty(address.NewPropertyAddress(bound, definition.ID()), dependencies)
+}
 
+func (e expressionExtractor) resolveTraversal(requirements []StaticRequirement, requirement StaticRequirement, context extractionContext, dependencies map[address.PropertyAddress]struct{}) error {
+	source, _ := requirement.Traversal()
+	origin, err := traversalOrigin(context, source)
+	if err != nil {
+		return err
+	}
+	if _, ok := e.relationType(source.RelationTypeID()); !ok {
+		return newBuildError(BuildErrorInvalidTraversal, "aggregate traversal relation type could not be resolved")
+	}
+	items, err := e.traversalItems(origin.ID(), source)
+	if err != nil {
+		return err
+	}
 	for _, item := range items {
-		relation, ok :=
-			e.source.Relation(
-				item.relation.ID(),
-			)
-
-		if !ok ||
-			!relation.IsValid() {
-
-			return newBuildError(
-				BuildErrorInvalidTraversal,
-				"traversed relation could not be resolved",
-			)
+		relation, ok := e.source.Relation(item.relation.ID())
+		if !ok || !relation.IsValid() {
+			return newBuildError(BuildErrorInvalidTraversal, "traversed relation could not be resolved")
 		}
-
-		if applicability, hasApplicability :=
-			relation.Applicability(); hasApplicability {
-
-			if err := e.walk(
-				applicability,
-				extractionContext{
-					self: address.RelationRef(
-						relation.ID(),
-					),
-				},
-				dependencies,
-			); err != nil {
+		if applicability, ok := relation.Applicability(); ok {
+			applicabilityRequirements, err := AnalyzeStatic(applicability)
+			if err != nil {
+				return newBuildError(BuildErrorInvalidExpression, err.Error())
+			}
+			if err := e.resolveRequirements(applicabilityRequirements, 0, extractionContext{self: address.RelationRef(relation.ID())}, dependencies); err != nil {
 				return err
 			}
 		}
-
-		childContext :=
-			context.withBinding(
-				item,
-			)
-
-		if filter, hasFilter :=
-			expression.Filter(); hasFilter {
-
-			if err := e.walk(
-				filter,
-				childContext,
-				dependencies,
-			); err != nil {
-				return err
-			}
-		}
-
-		if mapExpression, hasMap :=
-			expression.Map(); hasMap {
-
-			if err := e.walk(
-				mapExpression,
-				childContext,
-				dependencies,
-			); err != nil {
-				return err
-			}
+		if err := e.resolveRequirements(requirements, requirement.TraversalID(), context.withBinding(item), dependencies); err != nil {
+			return err
 		}
 	}
-
 	return nil
 }
 

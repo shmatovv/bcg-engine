@@ -245,13 +245,6 @@ func (b *graphBuilder) addObjectProperties(
 			)
 		}
 
-		// AnalyzeStatic is the canonical AST semantics gate shared with
-		// schema-level planning. Concrete extraction below only resolves these
-		// requirements against this source's actual objects.
-		if _, err := AnalyzeStatic(expression); err != nil {
-			return newBuildError(BuildErrorInvalidExpression, "derived property has invalid static dependency syntax")
-		}
-
 		extractor :=
 			expressionExtractor{
 				source:        b.source,

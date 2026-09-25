@@ -36,8 +36,12 @@ func TestPublicPlanEvaluationDirectAndTraversal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := model.PlanEvaluationWithContext([]bcg.PropertyTarget{target}, context); err != nil {
+	contextPlan, err := model.PlanEvaluationWithContext([]bcg.PropertyTarget{target}, context)
+	if err != nil {
 		t.Fatalf("context plan: %v", err)
+	}
+	if !reflect.DeepEqual(contextPlan, mustPlan(t, model, target)) {
+		t.Fatal("context plan widened or changed the conservative model plan")
 	}
 
 	aggregate, err := bcg.Unmarshal([]byte(publicAggregateArtifact))
@@ -66,10 +70,33 @@ func TestPublicPlanEvaluationDirectAndTraversal(t *testing.T) {
 	if req.Direction() != bcg.TraverseOutgoing || len(req.FilterDependencies()) == 0 || len(req.MapDependencies()) == 0 {
 		t.Fatalf("traversal requirement omitted filter/map dependency: %#v", req)
 	}
+	// This is deliberately an external-consumer proof: the model-level plan,
+	// Dataset snapshot evaluation, and dynamically recorded provenance agree
+	// without relying on internal graph types or display strings.
+	builder, err := bcg.NewDatasetBuilder(am, bcg.NewID())
+	if err != nil {
+		t.Fatal(err)
+	}
+	dataset, err := builder.Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := am.WithDataset(dataset)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := snapshot.Evaluate(mustPlanAddress(t, am, total), context); err != nil {
+		t.Fatalf("snapshot aggregate evaluation: %v", err)
+	}
+	explained, err := snapshot.Explain(mustPlanAddress(t, am, total), context)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertPlanCoversExplanation(t, aggregatePlan, explained.Root())
 }
 
 func TestPublicPlanEvaluationFunctionRequirement(t *testing.T) {
-	model, _, _, _ := phase34BenchmarkFunction(t)
+	model, targetAddress, context, runtime := phase34BenchmarkFunction(t)
 	var derived bcg.PropertyDefinition
 	for _, candidate := range model.PropertyDefinitionDeclarations() {
 		if candidate.Computation().Kind() == bcg.ComputationDerived {
@@ -88,6 +115,56 @@ func TestPublicPlanEvaluationFunctionRequirement(t *testing.T) {
 	if len(plan.FunctionRequirements()) != 1 {
 		t.Fatalf("function requirements = %#v", plan.FunctionRequirements())
 	}
+	builder, err := bcg.NewDatasetBuilder(model, bcg.NewID())
+	if err != nil {
+		t.Fatal(err)
+	}
+	dataset, err := builder.Build()
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := runtime.WithDataset(model, dataset)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := snapshot.Evaluate(targetAddress, context); err != nil {
+		t.Fatalf("snapshot function evaluation: %v", err)
+	}
+}
+
+func mustPlanAddress(t testing.TB, model bcg.Model, definition bcg.PropertyDefinition) bcg.PropertyAddress {
+	t.Helper()
+	for _, entity := range model.Entities() {
+		if entity.TypeID().Equal(definition.Owner().ID()) {
+			address, err := bcg.EntityProperty(entity.ID(), definition.ID())
+			if err != nil {
+				t.Fatal(err)
+			}
+			return address
+		}
+	}
+	t.Fatal("no embedded entity owns planned definition")
+	return bcg.PropertyAddress{}
+}
+
+func assertPlanCoversExplanation(t testing.TB, plan bcg.DependencyPlan, node bcg.ExplanationNode) {
+	t.Helper()
+	allowed := make(map[bcg.ID]struct{})
+	for _, definition := range append(plan.Targets(), plan.DependentPropertyDefinitions()...) {
+		allowed[definition.ID()] = struct{}{}
+	}
+	var walk func(bcg.ExplanationNode)
+	walk = func(current bcg.ExplanationNode) {
+		if property, ok := current.Property(); ok {
+			if _, exists := allowed[property.DefinitionID()]; !exists {
+				t.Fatalf("observed property definition %s is absent from dependency plan", property.DefinitionID())
+			}
+		}
+		for _, child := range current.Children() {
+			walk(child)
+		}
+	}
+	walk(node)
 }
 
 func mustPlan(t testing.TB, m bcg.Model, target bcg.PropertyTarget) bcg.DependencyPlan {

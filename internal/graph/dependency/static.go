@@ -33,23 +33,31 @@ const (
 	StaticPhaseMap
 )
 
-// StaticRequirement is an immutable AST-level fact. TraversalID is non-zero
-// for requirements lexically inside an aggregate and identifies its source.
+// StaticRequirement is an immutable AST-level fact. TraversalID identifies a
+// traversal declaration. ParentTraversalID identifies the lexical aggregate
+// whose item context resolves this requirement; zero is the expression root.
 type StaticRequirement struct {
-	kind         StaticKind
-	phase        StaticPhase
-	traversalID  uint32
-	definitionID identity.UUID
-	contractID   identity.UUID
-	address      address.PropertyAddress
-	boundTarget  ast.BoundTarget
-	traversal    ast.TraversalSource
-	function     function.Ref
+	kind              StaticKind
+	phase             StaticPhase
+	traversalID       uint32
+	parentTraversalID uint32
+	definitionID      identity.UUID
+	contractID        identity.UUID
+	address           address.PropertyAddress
+	boundTarget       ast.BoundTarget
+	traversal         ast.TraversalSource
+	function          function.Ref
 }
 
-func (r StaticRequirement) Kind() StaticKind            { return r.kind }
-func (r StaticRequirement) Phase() StaticPhase          { return r.phase }
-func (r StaticRequirement) TraversalID() uint32         { return r.traversalID }
+func (r StaticRequirement) Kind() StaticKind    { return r.kind }
+func (r StaticRequirement) Phase() StaticPhase  { return r.phase }
+func (r StaticRequirement) TraversalID() uint32 { return r.traversalID }
+func (r StaticRequirement) ParentTraversalID() uint32 {
+	if r.kind == StaticTraversal {
+		return r.parentTraversalID
+	}
+	return r.traversalID
+}
 func (r StaticRequirement) DefinitionID() identity.UUID { return r.definitionID }
 func (r StaticRequirement) ContractID() identity.UUID   { return r.contractID }
 func (r StaticRequirement) Address() (address.PropertyAddress, bool) {
@@ -70,7 +78,8 @@ func AnalyzeStatic(expression ast.Expression) ([]StaticRequirement, error) {
 	if expression == nil {
 		return nil, fmt.Errorf("dependency: invalid static expression")
 	}
-	if _, valid := ast.Depth(expression); !valid {
+	depth, valid := ast.Depth(expression)
+	if !valid || depth > ast.MaxExpressionDepth {
 		return nil, fmt.Errorf("dependency: invalid static expression")
 	}
 	a := staticAnalyzer{}
@@ -107,7 +116,7 @@ func (a *staticAnalyzer) walk(e ast.Expression, phase StaticPhase, traversalID u
 	case ast.Aggregate:
 		a.next++
 		id := a.next
-		a.out = append(a.out, StaticRequirement{kind: StaticTraversal, phase: phase, traversalID: id, traversal: x.Source()})
+		a.out = append(a.out, StaticRequirement{kind: StaticTraversal, phase: phase, traversalID: id, parentTraversalID: traversalID, traversal: x.Source()})
 		if f, ok := x.Filter(); ok {
 			if err := a.walk(f, StaticPhaseFilter, id); err != nil {
 				return err
