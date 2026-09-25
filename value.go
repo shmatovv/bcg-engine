@@ -23,6 +23,7 @@ const (
 	ValueDate     ValueKind = "Date"
 	ValueDateTime ValueKind = "DateTime"
 	ValueDuration ValueKind = "Duration"
+	ValueEnum     ValueKind = "Enum"
 )
 
 // Decimal is an exact arbitrary-precision decimal. It never uses float64.
@@ -252,6 +253,8 @@ func (v Value) Kind() ValueKind {
 		return ValueDateTime
 	case enginevalue.Duration:
 		return ValueDuration
+	case enginevalue.Enum:
+		return ValueEnum
 	default:
 		return ""
 	}
@@ -260,7 +263,33 @@ func (v Value) Kind() ValueKind {
 // Type returns v's scalar ValueType, or the invalid zero ValueType when v is
 // invalid. ValueType is the schema-facing type description; Kind remains the
 // backward-compatible runtime label.
-func (v Value) Type() ValueType { return valueTypeFromInternal(v.value.Type()) }
+func (v Value) Type() ValueType {
+	result := valueTypeFromInternal(v.value.Type())
+	return result
+}
+
+// EnumValue constructs a defined Enum option value. The definition and option
+// relationship is checked against the Model when used in a binding/expression.
+func EnumValue(enumDefinitionID, optionID ID) (Value, error) {
+	definition, err := enumDefinitionID.internal()
+	if err != nil {
+		return Value{}, fmt.Errorf("%w: enum definition ID: %v", ErrInvalidArgument, err)
+	}
+	option, err := optionID.internal()
+	if err != nil {
+		return Value{}, fmt.Errorf("%w: enum option ID: %v", ErrInvalidArgument, err)
+	}
+	return valueFromInternal(enginevalue.NewTyped(enginevalue.NewEnum(definition, option))), nil
+}
+
+func (v Value) EnumDefinitionID() (ID, bool) {
+	id, ok := v.value.EnumDefinitionID()
+	return idFromInternal(id), ok
+}
+func (v Value) EnumOptionID() (ID, bool) {
+	id, ok := v.value.EnumOptionID()
+	return idFromInternal(id), ok
+}
 
 // Unit returns v's optional unit.
 func (v Value) Unit() (Unit, bool) {

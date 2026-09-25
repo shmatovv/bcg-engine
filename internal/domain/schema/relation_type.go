@@ -130,6 +130,8 @@ type RelationType struct {
 	to                  TypeConstraint
 	hasTo               bool
 	propertyDefinitions []identity.UUID
+	outgoingCardinality Cardinality
+	incomingCardinality Cardinality
 }
 
 // NewRelationType constructs a RelationType.
@@ -153,12 +155,24 @@ func NewRelationType(
 	hasTo bool,
 	propertyDefinitions []identity.UUID,
 ) RelationType {
+	return NewRelationTypeWithCardinality(id, name, from, hasFrom, to, hasTo, propertyDefinitions, UnboundedCardinality(0), UnboundedCardinality(0))
+}
+
+// NewRelationTypeWithCardinality constructs a RelationType with directional
+// per-source and per-target cardinality declarations.
+func NewRelationTypeWithCardinality(
+	id identity.UUID, name string, from TypeConstraint, hasFrom bool, to TypeConstraint, hasTo bool,
+	propertyDefinitions []identity.UUID, outgoingCardinality Cardinality, incomingCardinality Cardinality,
+) RelationType {
 	if id.IsZero() {
 		panic("schema: relation type id must not be zero")
 	}
 
 	if name == "" {
 		panic("schema: relation type name must not be empty")
+	}
+	if !outgoingCardinality.IsValid() || !incomingCardinality.IsValid() {
+		panic("schema: relation type cardinality is invalid")
 	}
 
 	if hasFrom && !from.IsValid() {
@@ -201,8 +215,16 @@ func NewRelationType(
 		to:                  to,
 		hasTo:               hasTo,
 		propertyDefinitions: definitions,
+		outgoingCardinality: outgoingCardinality,
+		incomingCardinality: incomingCardinality,
 	}
 }
+
+// OutgoingCardinality applies to each source endpoint for this RelationType.
+func (t RelationType) OutgoingCardinality() Cardinality { return t.outgoingCardinality }
+
+// IncomingCardinality applies to each target endpoint for this RelationType.
+func (t RelationType) IncomingCardinality() Cardinality { return t.incomingCardinality }
 
 // ID returns the stable identity of the RelationType.
 func (t RelationType) ID() identity.UUID {

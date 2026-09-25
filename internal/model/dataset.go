@@ -27,8 +27,8 @@ func newDataset(id, modelVersionID identity.UUID, entities []semantic.Entity, re
 		entities:       cloneSlice(entities),
 		relations:      cloneSlice(relations),
 		valueBindings:  cloneSlice(bindings),
-		indexes: buildIndexes(nil, nil, nil, nil, nil, nil,
-			entities, relations, nil, nil, bindings),
+		indexes: buildIndexes(nil, nil, nil, nil, nil, nil, nil, nil,
+			entities, relations, nil, nil, nil, bindings),
 	}
 }
 

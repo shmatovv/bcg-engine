@@ -1,6 +1,7 @@
 package value
 
 import (
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/identity"
 	"github.com/shmatovv/bcg-engine/v2/internal/types/unit"
 )
 
@@ -65,6 +66,9 @@ func (v Typed) Raw() Raw {
 func (v Typed) Type() Type {
 	return v.raw.Type()
 }
+
+func (v Typed) EnumDefinitionID() (identity.UUID, bool) { return v.raw.EnumDefinitionID() }
+func (v Typed) EnumOptionID() (identity.UUID, bool)     { return v.raw.EnumOptionID() }
 
 // HasUnit reports whether v has an associated Unit.
 func (v Typed) HasUnit() bool {

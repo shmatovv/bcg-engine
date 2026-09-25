@@ -3,6 +3,7 @@ package model
 import (
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/identity"
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/schema"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/value"
 )
 
 func (d *Draft) validateContractsAndTraits(
@@ -151,7 +152,7 @@ func validateContractImplementation(
 ) bool {
 	compatible := true
 
-	if definition.ValueType() != contract.ValueType() {
+	if definition.ValueType() != contract.ValueType() || (definition.ValueType() == value.Enum && !sameEnumDefinition(definition, contract)) {
 		report.append(
 			newRelatedValidationIssue(
 				ValidationIssueContractValueTypeMismatch,
@@ -184,6 +185,12 @@ func validateContractImplementation(
 	}
 
 	return compatible
+}
+
+func sameEnumDefinition(definition schema.PropertyDefinition, contract schema.PropertyContract) bool {
+	left, leftOK := definition.EnumDefinitionID()
+	right, rightOK := contract.EnumDefinitionID()
+	return leftOK && rightOK && left == right
 }
 
 func validateContractDimension(

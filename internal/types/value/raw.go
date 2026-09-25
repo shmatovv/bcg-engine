@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/big"
 
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/identity"
 	"github.com/shmatovv/bcg-engine/v2/internal/types/date"
 	"github.com/shmatovv/bcg-engine/v2/internal/types/datetime"
 	"github.com/shmatovv/bcg-engine/v2/internal/types/decimal"
@@ -38,13 +39,24 @@ import (
 type Raw struct {
 	typ Type
 
-	boolValue     bool
-	integerValue  big.Int
-	decimalValue  decimal.Decimal
-	stringValue   string
-	dateValue     date.Date
-	dateTimeValue datetime.DateTime
-	durationValue duration.Duration
+	boolValue        bool
+	integerValue     big.Int
+	decimalValue     decimal.Decimal
+	stringValue      string
+	dateValue        date.Date
+	dateTimeValue    datetime.DateTime
+	durationValue    duration.Duration
+	enumDefinitionID identity.UUID
+	enumOptionID     identity.UUID
+}
+
+// NewEnum constructs an Enum raw value. Both IDs are part of the value's
+// type identity: an option cannot migrate between definitions by name.
+func NewEnum(definitionID, optionID identity.UUID) Raw {
+	if definitionID.IsZero() || optionID.IsZero() {
+		panic("value: enum ids must not be zero")
+	}
+	return Raw{typ: Enum, enumDefinitionID: definitionID, enumOptionID: optionID}
 }
 
 // NewBool returns a Raw containing value as a Bool.
@@ -187,10 +199,19 @@ func (r Raw) IsValid() bool {
 
 	case Duration:
 		return true
+	case Enum:
+		return !r.enumDefinitionID.IsZero() && !r.enumOptionID.IsZero()
 
 	default:
 		return false
 	}
+}
+
+func (r Raw) EnumDefinitionID() (identity.UUID, bool) {
+	return r.enumDefinitionID, r.typ == Enum && r.IsValid()
+}
+func (r Raw) EnumOptionID() (identity.UUID, bool) {
+	return r.enumOptionID, r.typ == Enum && r.IsValid()
 }
 
 // Bool returns the Bool contained in r.
@@ -295,6 +316,8 @@ func (r Raw) Equal(other Raw) bool {
 
 	case Duration:
 		return r.durationValue.Equal(other.durationValue)
+	case Enum:
+		return r.enumDefinitionID == other.enumDefinitionID && r.enumOptionID == other.enumOptionID
 
 	default:
 		return false

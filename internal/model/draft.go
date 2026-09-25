@@ -3,6 +3,7 @@ package model
 import (
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/constraint"
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/identity"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/invariant"
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/rule"
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/schema"
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/scope"
@@ -17,12 +18,14 @@ import (
 // Internal slices are never exposed directly.
 type Draft struct {
 	// Schema.
-	entityTypes         []schema.EntityType
-	relationTypes       []schema.RelationType
-	traits              []schema.Trait
-	propertyContracts   []schema.PropertyContract
-	propertyDefinitions []schema.PropertyDefinition
-	scopeDefinitions    []scope.Definition
+	entityTypes          []schema.EntityType
+	enumDefinitions      []schema.EnumDefinition
+	entityKeyDefinitions []schema.EntityKeyDefinition
+	relationTypes        []schema.RelationType
+	traits               []schema.Trait
+	propertyContracts    []schema.PropertyContract
+	propertyDefinitions  []schema.PropertyDefinition
+	scopeDefinitions     []scope.Definition
 
 	// Semantic data.
 	entities  []semantic.Entity
@@ -35,7 +38,8 @@ type Draft struct {
 	constraints []constraint.Constraint
 
 	// Declarative side-effect-free rules.
-	rules []rule.Rule
+	rules      []rule.Rule
+	invariants []invariant.Invariant
 }
 
 // NewDraft constructs an empty model draft.
@@ -60,18 +64,34 @@ func NewDraftFromVersion(version ModelVersion) *Draft {
 	}
 
 	return &Draft{
-		entityTypes:         version.EntityTypes(),
-		relationTypes:       version.RelationTypes(),
-		traits:              version.Traits(),
-		propertyContracts:   version.PropertyContracts(),
-		propertyDefinitions: version.PropertyDefinitions(),
-		scopeDefinitions:    version.ScopeDefinitions(),
-		entities:            version.Entities(),
-		relations:           version.Relations(),
-		valueBindings:       version.ValueBindings(),
-		constraints:         version.Constraints(),
-		rules:               version.Rules(),
+		entityTypes:          version.EntityTypes(),
+		enumDefinitions:      version.EnumDefinitions(),
+		entityKeyDefinitions: version.EntityKeyDefinitions(),
+		relationTypes:        version.RelationTypes(),
+		traits:               version.Traits(),
+		propertyContracts:    version.PropertyContracts(),
+		propertyDefinitions:  version.PropertyDefinitions(),
+		scopeDefinitions:     version.ScopeDefinitions(),
+		entities:             version.Entities(),
+		relations:            version.Relations(),
+		valueBindings:        version.ValueBindings(),
+		constraints:          version.Constraints(),
+		rules:                version.Rules(),
+		invariants:           version.Invariants(),
 	}
+}
+
+func (d *Draft) AddEnumDefinition(value schema.EnumDefinition) {
+	d.requireNonNil()
+	d.enumDefinitions = append(d.enumDefinitions, value)
+}
+func (d *Draft) AddEntityKeyDefinition(value schema.EntityKeyDefinition) {
+	d.requireNonNil()
+	d.entityKeyDefinitions = append(d.entityKeyDefinitions, value)
+}
+func (d *Draft) AddInvariant(value invariant.Invariant) {
+	d.requireNonNil()
+	d.invariants = append(d.invariants, value)
 }
 
 func (d *Draft) AddEntityType(
@@ -219,6 +239,42 @@ func (d *Draft) RemoveEntityType(id identity.UUID) bool {
 	var removed bool
 	d.entityTypes, removed = removeDraftItem(d.entityTypes, id, func(item schema.EntityType) identity.UUID { return item.ID() })
 	return removed
+}
+func (d *Draft) ReplaceEnumDefinition(id identity.UUID, value schema.EnumDefinition) bool {
+	d.requireNonNil()
+	var ok bool
+	d.enumDefinitions, ok = replaceDraftItem(d.enumDefinitions, id, value, func(v schema.EnumDefinition) identity.UUID { return v.ID() })
+	return ok
+}
+func (d *Draft) RemoveEnumDefinition(id identity.UUID) bool {
+	d.requireNonNil()
+	var ok bool
+	d.enumDefinitions, ok = removeDraftItem(d.enumDefinitions, id, func(v schema.EnumDefinition) identity.UUID { return v.ID() })
+	return ok
+}
+func (d *Draft) ReplaceEntityKeyDefinition(id identity.UUID, value schema.EntityKeyDefinition) bool {
+	d.requireNonNil()
+	var ok bool
+	d.entityKeyDefinitions, ok = replaceDraftItem(d.entityKeyDefinitions, id, value, func(v schema.EntityKeyDefinition) identity.UUID { return v.ID() })
+	return ok
+}
+func (d *Draft) RemoveEntityKeyDefinition(id identity.UUID) bool {
+	d.requireNonNil()
+	var ok bool
+	d.entityKeyDefinitions, ok = removeDraftItem(d.entityKeyDefinitions, id, func(v schema.EntityKeyDefinition) identity.UUID { return v.ID() })
+	return ok
+}
+func (d *Draft) ReplaceInvariant(id identity.UUID, value invariant.Invariant) bool {
+	d.requireNonNil()
+	var ok bool
+	d.invariants, ok = replaceDraftItem(d.invariants, id, value, func(v invariant.Invariant) identity.UUID { return v.ID() })
+	return ok
+}
+func (d *Draft) RemoveInvariant(id identity.UUID) bool {
+	d.requireNonNil()
+	var ok bool
+	d.invariants, ok = removeDraftItem(d.invariants, id, func(v invariant.Invariant) identity.UUID { return v.ID() })
+	return ok
 }
 
 // ReplaceRelationType replaces the RelationType currently identified by id.
@@ -422,6 +478,14 @@ func (d *Draft) EntityTypes() []schema.EntityType {
 
 	return cloneSlice(d.entityTypes)
 }
+func (d *Draft) EnumDefinitions() []schema.EnumDefinition {
+	d.requireNonNil()
+	return cloneSlice(d.enumDefinitions)
+}
+func (d *Draft) EntityKeyDefinitions() []schema.EntityKeyDefinition {
+	d.requireNonNil()
+	return cloneSlice(d.entityKeyDefinitions)
+}
 
 func (d *Draft) RelationTypes() []schema.RelationType {
 	d.requireNonNil()
@@ -483,11 +547,16 @@ func (d *Draft) Rules() []rule.Rule {
 
 	return cloneSlice(d.rules)
 }
+func (d *Draft) Invariants() []invariant.Invariant {
+	d.requireNonNil()
+	return cloneSlice(d.invariants)
+}
 
 func (d *Draft) IsEmpty() bool {
 	d.requireNonNil()
 
 	return len(d.entityTypes) == 0 &&
+		len(d.enumDefinitions) == 0 && len(d.entityKeyDefinitions) == 0 &&
 		len(d.relationTypes) == 0 &&
 		len(d.traits) == 0 &&
 		len(d.propertyContracts) == 0 &&
@@ -497,7 +566,7 @@ func (d *Draft) IsEmpty() bool {
 		len(d.relations) == 0 &&
 		len(d.valueBindings) == 0 &&
 		len(d.constraints) == 0 &&
-		len(d.rules) == 0
+		len(d.rules) == 0 && len(d.invariants) == 0
 }
 
 func (d *Draft) requireNonNil() {

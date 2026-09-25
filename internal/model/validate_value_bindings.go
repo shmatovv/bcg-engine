@@ -342,6 +342,19 @@ func validateBindingValue(
 			)
 			valid = false
 		}
+		if definition.ValueType() == value.Enum {
+			definitionID, hasDefinition := definition.EnumDefinitionID()
+			valueDefinitionID, hasValueDefinition := typedValue.EnumDefinitionID()
+			optionID, hasOption := typedValue.EnumOptionID()
+			enum, known := indexes.enumDefinitionByID[definitionID]
+			if !hasDefinition || !hasValueDefinition || !hasOption || !known || valueDefinitionID != definitionID {
+				report.append(newRelatedValidationIssue(ValidationIssueValueTypeMismatch, resolved.subjectID, definition.ID(), "enum value belongs to a different enum definition"))
+				valid = false
+			} else if _, ok := enum.Option(optionID); !ok {
+				report.append(newRelatedValidationIssue(ValidationIssueValueTypeMismatch, resolved.subjectID, definition.ID(), "enum value references an unknown option"))
+				valid = false
+			}
+		}
 
 		if !bindingUnitMatchesDefinition(
 			typedValue,

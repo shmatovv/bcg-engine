@@ -96,6 +96,7 @@ func (d *Draft) validate(includeDependencyGraph bool) ValidationReport {
 		&report,
 		indexes,
 	)
+	d.validateV2Schema(&report)
 
 	if includeDependencyGraph {
 		d.validateDependencyGraph(

@@ -86,6 +86,16 @@ func (k ComputationKind) IsValid() bool {
 	return k == ComputationInput || k == ComputationDerived
 }
 
+type PresencePolicy uint8
+
+const (
+	PresenceInvalid PresencePolicy = iota
+	PresenceOptional
+	PresenceRequired
+)
+
+func (p PresencePolicy) IsValid() bool { return p == PresenceOptional || p == PresenceRequired }
+
 func (k ComputationKind) String() string {
 	switch k {
 	case ComputationInput:
@@ -104,12 +114,17 @@ func (k ComputationKind) String() string {
 type Computation struct {
 	kind       ComputationKind
 	expression ast.Expression
+	presence   PresencePolicy
 }
 
 func InputComputation() Computation {
-	return Computation{
-		kind: ComputationInput,
+	return InputComputationWithPresence(PresenceOptional)
+}
+func InputComputationWithPresence(presence PresencePolicy) Computation {
+	if !presence.IsValid() {
+		panic("schema: invalid input presence")
 	}
+	return Computation{kind: ComputationInput, presence: presence}
 }
 
 func DerivedComputation(expression ast.Expression) Computation {
@@ -122,6 +137,7 @@ func DerivedComputation(expression ast.Expression) Computation {
 		expression: expression,
 	}
 }
+func (c Computation) Presence() (PresencePolicy, bool) { return c.presence, c.kind == ComputationInput }
 
 func (c Computation) Kind() ComputationKind {
 	return c.kind
@@ -138,10 +154,10 @@ func (c Computation) Expression() (ast.Expression, bool) {
 func (c Computation) IsValid() bool {
 	switch c.kind {
 	case ComputationInput:
-		return c.expression == nil
+		return c.expression == nil && c.presence.IsValid()
 
 	case ComputationDerived:
-		return c.expression != nil
+		return c.expression != nil && c.presence == PresenceInvalid
 
 	default:
 		return false
@@ -162,13 +178,26 @@ type PropertyDefinition struct {
 
 	name string
 
-	valueType value.Type
+	valueType         value.Type
+	enumDefinitionID  identity.UUID
+	hasEnumDefinition bool
 
 	unit    unit.Unit
 	hasUnit bool
 
 	temporalMode TemporalMode
 	computation  Computation
+}
+
+// NewEnumPropertyDefinition adds a property whose Enum type is tied to an
+// exact EnumDefinition. v1 callers retain NewPropertyDefinition.
+func NewEnumPropertyDefinition(id identity.UUID, owner PropertyOwner, contractID identity.UUID, hasContract bool, name string, enumDefinitionID identity.UUID, propertyUnit unit.Unit, hasUnit bool, temporalMode TemporalMode, computation Computation) PropertyDefinition {
+	if enumDefinitionID.IsZero() {
+		panic("schema: enum definition id must not be zero")
+	}
+	result := NewPropertyDefinition(id, owner, contractID, hasContract, name, value.Enum, propertyUnit, hasUnit, temporalMode, computation)
+	result.enumDefinitionID, result.hasEnumDefinition = enumDefinitionID, true
+	return result
 }
 
 func NewPropertyDefinition(
@@ -256,6 +285,9 @@ func (d PropertyDefinition) Name() string {
 func (d PropertyDefinition) ValueType() value.Type {
 	return d.valueType
 }
+func (d PropertyDefinition) EnumDefinitionID() (identity.UUID, bool) {
+	return d.enumDefinitionID, d.hasEnumDefinition
+}
 
 func (d PropertyDefinition) Unit() (unit.Unit, bool) {
 	return d.unit, d.hasUnit
@@ -284,6 +316,13 @@ func (d PropertyDefinition) IsValid() bool {
 			return false
 		}
 	} else if !d.contractID.IsZero() {
+		return false
+	}
+	if d.valueType == value.Enum {
+		if !d.hasEnumDefinition || d.enumDefinitionID.IsZero() {
+			return false
+		}
+	} else if d.hasEnumDefinition || !d.enumDefinitionID.IsZero() {
 		return false
 	}
 

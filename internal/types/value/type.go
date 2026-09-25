@@ -28,6 +28,10 @@ const (
 	// Duration represents an elapsed or requested amount of time.
 	Duration
 
+	// Enum represents one option of a schema-owned EnumDefinition. The
+	// definition identity is carried by Raw/Typed rather than this broad kind.
+	Enum
+
 	last
 )
 
@@ -55,6 +59,8 @@ func (t Type) String() string {
 		return "DateTime"
 	case Duration:
 		return "Duration"
+	case Enum:
+		return "Enum"
 	default:
 		return "Invalid"
 	}

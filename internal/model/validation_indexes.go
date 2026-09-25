@@ -9,7 +9,8 @@ import (
 )
 
 type validationIndexes struct {
-	entityTypeByID map[identity.UUID]schema.EntityType
+	entityTypeByID     map[identity.UUID]schema.EntityType
+	enumDefinitionByID map[identity.UUID]schema.EnumDefinition
 
 	relationTypeByID map[identity.UUID]schema.RelationType
 
@@ -38,6 +39,7 @@ func buildValidationIndexes(
 			map[identity.UUID]schema.EntityType,
 			len(d.entityTypes),
 		),
+		enumDefinitionByID: make(map[identity.UUID]schema.EnumDefinition, len(d.enumDefinitions)),
 		relationTypeByID: make(
 			map[identity.UUID]schema.RelationType,
 			len(d.relationTypes),
@@ -78,6 +80,9 @@ func buildValidationIndexes(
 			entityType.ID(),
 			entityType,
 		)
+	}
+	for _, definition := range d.enumDefinitions {
+		insertFirst(result.enumDefinitionByID, definition.ID(), definition)
 	}
 
 	for _, relationType := range d.relationTypes {

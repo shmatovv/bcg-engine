@@ -193,6 +193,37 @@ type RelationTypeSpec struct {
 	From                EndpointConstraint
 	To                  EndpointConstraint
 	PropertyDefinitions []ID
+	OutgoingCardinality Cardinality
+	IncomingCardinality Cardinality
+}
+
+// Cardinality is an explicit inclusive relation cardinality range. An absent
+// maximum means unbounded; its zero value is the v1-compatible 0..N range.
+type Cardinality struct {
+	min    uint64
+	max    uint64
+	hasMax bool
+}
+
+func NewCardinality(min, max uint64) (Cardinality, error) {
+	if min > max {
+		return Cardinality{}, invalidSchemaArgument("cardinality minimum exceeds maximum")
+	}
+	return Cardinality{min: min, max: max, hasMax: true}, nil
+}
+func UnboundedCardinality(min uint64) Cardinality { return Cardinality{min: min} }
+func (c Cardinality) Min() uint64                 { return c.min }
+func (c Cardinality) Max() (uint64, bool)         { return c.max, c.hasMax }
+func (c Cardinality) IsValid() bool               { return !c.hasMax || c.min <= c.max }
+func (c Cardinality) internal() (schema.Cardinality, error) {
+	if !c.IsValid() {
+		return schema.Cardinality{}, invalidSchemaArgument("cardinality is invalid")
+	}
+	return schema.NewCardinality(c.min, c.max, c.hasMax), nil
+}
+func cardinalityFromInternal(c schema.Cardinality) Cardinality {
+	max, ok := c.Max()
+	return Cardinality{min: c.Min(), max: max, hasMax: ok}
 }
 
 // RelationType is an immutable public schema declaration for a relation.
@@ -219,7 +250,15 @@ func NewRelationType(spec RelationTypeSpec) (RelationType, error) {
 	if err != nil {
 		return RelationType{}, err
 	}
-	return RelationType{value: schema.NewRelationType(id, spec.Name, from, hasFrom, to, hasTo, definitions)}, nil
+	outgoing, err := spec.OutgoingCardinality.internal()
+	if err != nil {
+		return RelationType{}, err
+	}
+	incoming, err := spec.IncomingCardinality.internal()
+	if err != nil {
+		return RelationType{}, err
+	}
+	return RelationType{value: schema.NewRelationTypeWithCardinality(id, spec.Name, from, hasFrom, to, hasTo, definitions, outgoing, incoming)}, nil
 }
 
 // ID returns the stable RelationType identity.
@@ -249,6 +288,12 @@ func (t RelationType) To() (EndpointConstraint, bool) {
 // PropertyDefinitions returns an owned list of available PropertyDefinition IDs.
 func (t RelationType) PropertyDefinitions() []ID {
 	return publicSchemaIDs(t.value.PropertyDefinitions())
+}
+func (t RelationType) OutgoingCardinality() Cardinality {
+	return cardinalityFromInternal(t.value.OutgoingCardinality())
+}
+func (t RelationType) IncomingCardinality() Cardinality {
+	return cardinalityFromInternal(t.value.IncomingCardinality())
 }
 
 // IsValid reports structural validity. Referential validity is checked by a Draft.
@@ -374,6 +419,40 @@ func InputComputation() PropertyComputation {
 	return PropertyComputation{value: schema.InputComputation()}
 }
 
+// PresencePolicy controls whether an Input property must have an unqualified
+// object-level base binding at runtime. It is not meaningful for Derived
+// properties.
+type PresencePolicy uint8
+
+const (
+	PresenceOptional PresencePolicy = iota + 1
+	PresenceRequired
+)
+
+func (p PresencePolicy) IsValid() bool { return p == PresenceOptional || p == PresenceRequired }
+func (p PresencePolicy) String() string {
+	if p == PresenceOptional {
+		return "Optional"
+	}
+	if p == PresenceRequired {
+		return "Required"
+	}
+	return "Invalid"
+}
+
+// InputComputationWithPresence constructs an Input computation with an
+// explicit policy. InputComputation remains the v1-compatible optional form.
+func InputComputationWithPresence(p PresencePolicy) (PropertyComputation, error) {
+	if !p.IsValid() {
+		return PropertyComputation{}, invalidSchemaArgument("input presence policy is invalid")
+	}
+	internal := schema.PresenceOptional
+	if p == PresenceRequired {
+		internal = schema.PresenceRequired
+	}
+	return PropertyComputation{value: schema.InputComputationWithPresence(internal)}, nil
+}
+
 // DerivedComputation constructs a Derived computation from an immutable
 // public Expression. Its value and schema compatibility are checked by
 // Draft.Validate and Draft.Commit.
@@ -404,6 +483,16 @@ func (c PropertyComputation) Expression() (Expression, bool) {
 	}
 	return Expression{value: expression}, true
 }
+func (c PropertyComputation) Presence() (PresencePolicy, bool) {
+	p, ok := c.value.Presence()
+	if !ok {
+		return 0, false
+	}
+	if p == schema.PresenceRequired {
+		return PresenceRequired, true
+	}
+	return PresenceOptional, true
+}
 
 // IsValid reports structural validity.
 func (c PropertyComputation) IsValid() bool { return c.value.IsValid() }
@@ -417,14 +506,15 @@ func propertyComputationFromInternal(value schema.Computation) PropertyComputati
 // unit; DimensionlessUnit is a distinct explicit unit. Property nullable
 // semantics belong to an implemented PropertyContract when present.
 type PropertyDefinitionSpec struct {
-	ID           ID
-	Owner        PropertyOwner
-	ContractID   ID
-	Name         string
-	ValueType    ValueType
-	Unit         Unit
-	TemporalMode TemporalMode
-	Computation  PropertyComputation
+	ID               ID
+	Owner            PropertyOwner
+	ContractID       ID
+	Name             string
+	ValueType        ValueType
+	EnumDefinitionID ID
+	Unit             Unit
+	TemporalMode     TemporalMode
+	Computation      PropertyComputation
 }
 
 // PropertyDefinition is an immutable public schema declaration for one
@@ -461,6 +551,12 @@ func NewPropertyDefinition(spec PropertyDefinitionSpec) (PropertyDefinition, err
 		contractID = spec.ContractID.value
 	}
 	propertyUnit, hasUnit := spec.Unit.value, spec.Unit.IsValid()
+	if spec.ValueType == EnumType {
+		if spec.EnumDefinitionID.IsZero() {
+			return PropertyDefinition{}, invalidSchemaArgument("enum property definition ID is required")
+		}
+		return PropertyDefinition{value: schema.NewEnumPropertyDefinition(id, owner, contractID, hasContract, spec.Name, spec.EnumDefinitionID.value, propertyUnit, hasUnit, temporalMode, spec.Computation.value)}, nil
+	}
 	return PropertyDefinition{value: schema.NewPropertyDefinition(
 		id,
 		owner,
@@ -497,6 +593,10 @@ func (d PropertyDefinition) Name() string { return d.value.Name() }
 func (d PropertyDefinition) ValueType() ValueType {
 	return valueTypeFromInternal(d.value.ValueType())
 }
+func (d PropertyDefinition) EnumDefinitionID() (ID, bool) {
+	id, ok := d.value.EnumDefinitionID()
+	return idFromInternal(id), ok
+}
 
 // Unit returns the optional concrete property unit.
 func (d PropertyDefinition) Unit() (Unit, bool) {
@@ -528,12 +628,13 @@ func (d PropertyDefinition) IsValid() bool { return d.value.IsValid() }
 // optional: nil means no dimensional requirement, while a pointer to
 // DimensionlessDimension means an explicit dimensionless requirement.
 type PropertyContractSpec struct {
-	ID           ID
-	Name         string
-	ValueType    ValueType
-	Dimension    *Dimension
-	TemporalMode TemporalMode
-	Nullable     bool
+	ID               ID
+	Name             string
+	ValueType        ValueType
+	EnumDefinitionID ID
+	Dimension        *Dimension
+	TemporalMode     TemporalMode
+	Nullable         bool
 }
 
 // PropertyContract is an immutable type and nullability requirement. It has
@@ -564,6 +665,12 @@ func NewPropertyContract(spec PropertyContractSpec) (PropertyContract, error) {
 			return PropertyContract{}, invalidSchemaArgument("property contract dimension is invalid")
 		}
 	}
+	if spec.ValueType == EnumType {
+		if spec.EnumDefinitionID.IsZero() {
+			return PropertyContract{}, invalidSchemaArgument("enum property contract definition ID is required")
+		}
+		return PropertyContract{value: schema.NewEnumPropertyContract(id, spec.Name, spec.EnumDefinitionID.value, dimension.value, hasDimension, temporalMode, spec.Nullable)}, nil
+	}
 	return PropertyContract{value: schema.NewPropertyContract(
 		id,
 		spec.Name,
@@ -584,6 +691,10 @@ func (c PropertyContract) Name() string { return c.value.Name() }
 // ValueType returns the required scalar value type.
 func (c PropertyContract) ValueType() ValueType {
 	return valueTypeFromInternal(c.value.ValueType())
+}
+func (c PropertyContract) EnumDefinitionID() (ID, bool) {
+	id, ok := c.value.EnumDefinitionID()
+	return idFromInternal(id), ok
 }
 
 // Dimension returns the optional required dimension.

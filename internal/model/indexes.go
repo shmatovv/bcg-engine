@@ -6,6 +6,7 @@ import (
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/address"
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/constraint"
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/identity"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/invariant"
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/rule"
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/schema"
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/scope"
@@ -15,7 +16,9 @@ import (
 type indexes struct {
 	valueBindingsByTarget map[semantic.ValueTarget][]semantic.ValueBinding
 
-	entityTypeByID map[identity.UUID]schema.EntityType
+	entityTypeByID          map[identity.UUID]schema.EntityType
+	enumDefinitionByID      map[identity.UUID]schema.EnumDefinition
+	entityKeyDefinitionByID map[identity.UUID]schema.EntityKeyDefinition
 
 	relationTypeByID map[identity.UUID]schema.RelationType
 
@@ -44,7 +47,8 @@ type indexes struct {
 
 	constraintIDsByDependency map[address.PropertyAddress][]identity.UUID
 
-	ruleByID map[identity.UUID]rule.Rule
+	ruleByID      map[identity.UUID]rule.Rule
+	invariantByID map[identity.UUID]invariant.Invariant
 
 	ruleDependenciesByID map[identity.UUID]RuleDependencies
 
@@ -62,6 +66,8 @@ type relationTraversalKey struct {
 
 func buildIndexes(
 	entityTypes []schema.EntityType,
+	enumDefinitions []schema.EnumDefinition,
+	entityKeyDefinitions []schema.EntityKeyDefinition,
 	relationTypes []schema.RelationType,
 	traits []schema.Trait,
 	propertyContracts []schema.PropertyContract,
@@ -71,6 +77,7 @@ func buildIndexes(
 	relations []semantic.Relation,
 	constraints []constraint.Constraint,
 	rules []rule.Rule,
+	invariants []invariant.Invariant,
 	valueBindings []semantic.ValueBinding,
 ) indexes {
 	result := indexes{
@@ -79,6 +86,8 @@ func buildIndexes(
 			map[identity.UUID]schema.EntityType,
 			len(entityTypes),
 		),
+		enumDefinitionByID:      make(map[identity.UUID]schema.EnumDefinition, len(enumDefinitions)),
+		entityKeyDefinitionByID: make(map[identity.UUID]schema.EntityKeyDefinition, len(entityKeyDefinitions)),
 
 		relationTypeByID: make(
 			map[identity.UUID]schema.RelationType,
@@ -141,6 +150,7 @@ func buildIndexes(
 			map[identity.UUID]rule.Rule,
 			len(rules),
 		),
+		invariantByID: make(map[identity.UUID]invariant.Invariant, len(invariants)),
 
 		ruleDependenciesByID: make(
 			map[identity.UUID]RuleDependencies,
@@ -170,6 +180,12 @@ func buildIndexes(
 					entityType,
 				)
 		}
+	}
+	for _, definition := range enumDefinitions {
+		result.enumDefinitionByID[definition.ID()] = definition
+	}
+	for _, definition := range entityKeyDefinitions {
+		result.entityKeyDefinitionByID[definition.ID()] = definition
 	}
 
 	for _, relationType := range relationTypes {
@@ -257,6 +273,9 @@ func buildIndexes(
 	for _, modelRule := range rules {
 		result.ruleByID[modelRule.ID()] =
 			modelRule
+	}
+	for _, declaration := range invariants {
+		result.invariantByID[declaration.ID()] = declaration
 	}
 
 	for traitID := range result.entityTypesByTrait {

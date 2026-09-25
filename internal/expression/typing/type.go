@@ -1,6 +1,7 @@
 package typing
 
 import (
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/identity"
 	"github.com/shmatovv/bcg-engine/v2/internal/types/unit"
 	"github.com/shmatovv/bcg-engine/v2/internal/types/value"
 )
@@ -35,8 +36,23 @@ type Type struct {
 	unit    unit.Unit
 	hasUnit bool
 
-	temporalMode TemporalMode
-	nullable     bool
+	temporalMode     TemporalMode
+	nullable         bool
+	enumDefinitionID identity.UUID
+}
+
+// NewQualifiedEnum constructs a fully qualified static Enum type. Enum
+// identity is part of assignability and comparison compatibility.
+func NewQualifiedEnum(enumDefinitionID identity.UUID, u unit.Unit, hasUnit bool, temporalMode TemporalMode, nullable bool) Type {
+	if enumDefinitionID.IsZero() {
+		panic("typing: enum definition id must be valid")
+	}
+	t := NewQualified(value.Enum, u, hasUnit, temporalMode, nullable)
+	t.enumDefinitionID = enumDefinitionID
+	return t
+}
+func (t Type) EnumDefinitionID() (identity.UUID, bool) {
+	return t.enumDefinitionID, t.valueType == value.Enum && !t.enumDefinitionID.IsZero()
 }
 
 // New constructs a non-nullable scalar static type without a unit.
@@ -156,6 +172,12 @@ func (t Type) WithTemporalMode(mode TemporalMode) Type {
 // Unit are enforced by the static type checker.
 func (t Type) IsValid() bool {
 	if !t.valueType.IsValid() {
+		return false
+	}
+	if t.valueType == value.Enum && t.enumDefinitionID.IsZero() {
+		return false
+	}
+	if t.valueType != value.Enum && !t.enumDefinitionID.IsZero() {
 		return false
 	}
 

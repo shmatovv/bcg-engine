@@ -60,6 +60,43 @@ func EvaluateExpression(
 	)
 }
 
+// EvaluateExpressionForSelf evaluates an expression with a concrete Entity or
+// Relation as its implicit self. It is used by subject-relative declarations.
+func EvaluateExpressionForSelf(version Source, expression ast.Expression, self address.ObjectRef, context runtime.CalculationContext) (Result, error) {
+	if !version.IsCommitted() || expression == nil || !self.IsValid() || !context.IsValid() {
+		return Result{}, newError(ErrorUnsupportedExpression, "self expression request is invalid", nil)
+	}
+	owner, ok := version.ObjectType(self)
+	if !ok {
+		return Result{}, newError(ErrorUnsupportedExpression, "self object owner could not be resolved", nil)
+	}
+	staticType, err := inference.Infer(expression, inference.NewContext(owner), version)
+	if err != nil || !staticType.IsValid() {
+		return Result{}, newError(ErrorUnsupportedExpression, "self expression cannot be statically inferred", err)
+	}
+	dependencies, err := dependency.ExtractExpressionForSelf(version, expression, self)
+	if err != nil {
+		return Result{}, newError(ErrorPlanBuild, "failed to extract self expression dependencies", err)
+	}
+	var effectivePlan plan.Plan
+	if len(dependencies) > 0 {
+		effectivePlan, err = plan.Build(version, dependencies, context)
+		if err != nil {
+			return Result{}, newError(ErrorPlanBuild, "failed to build self expression plan", err)
+		}
+	}
+	state := evaluationState{version: version, context: context, effectivePlan: effectivePlan, memo: make(map[address.PropertyAddress]Result), visiting: make(map[address.PropertyAddress]struct{})}
+	result, err := state.evaluateExpression(expression, newExpressionContext(self, owner))
+	if err != nil {
+		return Result{}, err
+	}
+	normalized, err := state.normalizeResolvedToStaticType(result.value, staticType)
+	if err != nil {
+		return Result{}, err
+	}
+	return newResult(normalized, result.provenance), nil
+}
+
 // evaluateStandaloneWithEnvironment is the Session path for standalone
 // expressions. It retains all ordinary validation and inference but reuses a
 // complete effective plan and concrete-property cache owned by the runtime

@@ -123,6 +123,13 @@ func InferComparison(
 				kind: ComparisonErrorIncompatibleOperands,
 			}
 		}
+		if left.ValueType() == value.Enum {
+			leftID, leftOK := left.EnumDefinitionID()
+			rightID, rightOK := right.EnumDefinitionID()
+			if !leftOK || !rightOK || leftID != rightID {
+				return typing.Type{}, ComparisonError{kind: ComparisonErrorIncompatibleOperands}
+			}
+		}
 
 	case ast.ComparisonLess,
 		ast.ComparisonLessOrEqual,

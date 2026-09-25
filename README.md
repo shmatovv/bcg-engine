@@ -19,10 +19,26 @@ Module: `github.com/shmatovv/bcg-engine/v2`. Requires Go 1.22 or newer.
 This is a private, proprietary library.
 
 v1.2.0 (`d7cc776`) remains the stable historical v1 release. This v2 module
-currently preserves its semantic and `.bcg v1` wire behavior while adding the
-public lossless-inspection foundation. It does not yet implement `.bcg v2`,
-Enums, presence policies, keys, cardinalities, invariants, extension
-functions, dataset patches/rebases, model evolution, or dependency planning.
+currently preserves v1 behavior and `.bcg v1` decoding while adding public
+lossless inspection and Schema v2 declarations: UUID-identified Enums, Input
+presence policies, Entity keys, directional Relation cardinality, and
+subject-relative Invariants. `.bcg v2`, extension functions, dataset
+patches/rebases, model evolution, and dependency planning remain deferred.
+
+Schema v2 declarations are in-memory model semantics for now. The v1 wire
+format is intentionally not extended: `NewArtifact` returns `ErrWireSemantic`
+for a model containing an Enum, key, invariant, required presence, non-default
+cardinality, or enum-typed property. Existing v1 artifacts continue to decode
+with optional input presence and `0..N` cardinality defaults.
+
+Enums retain definition and option UUIDs independently of names. An enum
+property specifies `ValueType: bcg.EnumType` and its `EnumDefinitionID`.
+`InputComputationWithPresence(bcg.PresenceRequired)` records the required base
+binding policy; it is deliberately not applied to derived properties. Keys,
+cardinality, and invariant declarations are all immutable and exposed through
+the corresponding deterministic Model list APIs. Invariants are evaluated
+purely for an Entity or Relation with `CheckInvariant` / the subject-specific
+bulk helpers; they are distinct from global Constraints and named Rules.
 
 Import the consumer API as:
 

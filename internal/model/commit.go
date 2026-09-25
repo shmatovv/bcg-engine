@@ -126,6 +126,8 @@ func Commit(
 		options.versionLabel,
 		options.precisionPolicy,
 		draft.entityTypes,
+		draft.enumDefinitions,
+		draft.entityKeyDefinitions,
 		draft.relationTypes,
 		draft.traits,
 		draft.propertyContracts,
@@ -136,5 +138,6 @@ func Commit(
 		draft.valueBindings,
 		draft.constraints,
 		draft.rules,
+		draft.invariants,
 	), nil
 }

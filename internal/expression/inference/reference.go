@@ -5,6 +5,7 @@ import (
 	"github.com/shmatovv/bcg-engine/v2/internal/expression/ast"
 	"github.com/shmatovv/bcg-engine/v2/internal/expression/typecheck"
 	"github.com/shmatovv/bcg-engine/v2/internal/expression/typing"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/value"
 )
 
 // ReferenceErrorKind identifies why static reference inference failed.
@@ -199,6 +200,13 @@ func TypeFromPropertyDefinition(
 	}
 
 	propertyUnit, hasUnit := definition.Unit()
+	if definition.ValueType() == value.Enum {
+		id, ok := definition.EnumDefinitionID()
+		if !ok {
+			return typing.Type{}, ReferenceError{kind: ReferenceErrorDefinitionNotFound}
+		}
+		return typing.NewQualifiedEnum(id, propertyUnit, hasUnit, temporalMode, nullable), nil
+	}
 
 	return typing.NewQualified(
 		definition.ValueType(),
@@ -619,6 +627,13 @@ func definitionSatisfiesContract(
 
 	if definition.ValueType() != contract.ValueType() {
 		return false
+	}
+	if definition.ValueType() == value.Enum {
+		left, leftOK := definition.EnumDefinitionID()
+		right, rightOK := contract.EnumDefinitionID()
+		if !leftOK || !rightOK || left != right {
+			return false
+		}
 	}
 
 	if definition.TemporalMode() != contract.TemporalMode() {

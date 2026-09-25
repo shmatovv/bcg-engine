@@ -28,6 +28,9 @@ func NewArtifact(model Model, scenarios ...Scenario) (Artifact, error) {
 	if !model.IsValid() {
 		return Artifact{}, fmt.Errorf("%w: committed model is required", ErrInvalidArgument)
 	}
+	if modelHasV2OnlySemantics(model) {
+		return Artifact{}, fmt.Errorf("%w: .bcg v1 cannot encode Schema v2 declarations", ErrWireSemantic)
+	}
 	values := make([]scenario.Scenario, len(scenarios))
 	for index, candidate := range scenarios {
 		if _, bound := candidate.value.BaseDatasetID(); bound {
@@ -46,6 +49,31 @@ func NewArtifact(model Model, scenarios ...Scenario) (Artifact, error) {
 		return Artifact{}, publicError(err)
 	}
 	return Artifact{value: artifact}, nil
+}
+
+func modelHasV2OnlySemantics(model Model) bool {
+	if len(model.EnumDefinitions()) != 0 || len(model.EntityKeyDefinitions()) != 0 || len(model.InvariantDefinitions()) != 0 {
+		return true
+	}
+	for _, relationType := range model.RelationTypeDefinitions() {
+		if relationType.OutgoingCardinality() != (Cardinality{}) || relationType.IncomingCardinality() != (Cardinality{}) {
+			return true
+		}
+	}
+	for _, definition := range model.PropertyDefinitionDeclarations() {
+		if definition.ValueType() == EnumType {
+			return true
+		}
+		if p, ok := definition.Computation().Presence(); ok && p == PresenceRequired {
+			return true
+		}
+	}
+	for _, contract := range model.PropertyContractDefinitions() {
+		if contract.ValueType() == EnumType {
+			return true
+		}
+	}
+	return false
 }
 
 // Decode reads one .bcg artifact from r.

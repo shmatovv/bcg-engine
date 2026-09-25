@@ -30,3 +30,12 @@ func ExtractStandaloneExpression(
 		extractionContext{},
 	)
 }
+
+// ExtractExpressionForSelf extracts concrete dependencies for an expression
+// evaluated relative to one concrete object.
+func ExtractExpressionForSelf(source Source, expression ast.Expression, self address.ObjectRef) ([]address.PropertyAddress, error) {
+	if source == nil || !self.IsValid() {
+		return nil, newBuildError(BuildErrorInvalidExpression, "expression self is invalid")
+	}
+	return expressionExtractor{source: source}.extract(expression, extractionContext{self: self})
+}

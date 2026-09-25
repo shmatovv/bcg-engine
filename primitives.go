@@ -10,33 +10,23 @@ import (
 	internalvalue "github.com/shmatovv/bcg-engine/v2/internal/types/value"
 )
 
-// ValueType describes the scalar type that later schema authoring assigns to
-// a property. It is distinct from Value: a ValueType is metadata such as
-// DecimalType, while a Value is one defined value such as DecimalValue(12.5).
-// The zero value is invalid.
+// ValueType describes the scalar type assigned to a property. Enum identity
+// is held separately by enum-aware schema declarations, preserving the
+// established numeric public ValueType representation.
 type ValueType uint8
 
 const (
-	// BoolType describes Boolean values.
 	BoolType ValueType = iota + 1
-	// IntegerType describes arbitrary-size integer values.
 	IntegerType
-	// DecimalType describes exact arbitrary-precision decimal values.
 	DecimalType
-	// StringType describes textual values.
 	StringType
-	// DateType describes calendar-date values.
 	DateType
-	// DateTimeType describes UTC instant values.
 	DateTimeType
-	// DurationType describes exact elapsed-duration values.
 	DurationType
+	EnumType
 )
 
-// IsValid reports whether t is a supported BCG v1 scalar value type.
-func (t ValueType) IsValid() bool {
-	return t >= BoolType && t <= DurationType
-}
+func (t ValueType) IsValid() bool { return t >= BoolType && t <= EnumType }
 
 // String returns the stable scalar type name, or "Invalid".
 func (t ValueType) String() string {
@@ -55,6 +45,8 @@ func (t ValueType) String() string {
 		return "DateTime"
 	case DurationType:
 		return "Duration"
+	case EnumType:
+		return "Enum"
 	default:
 		return "Invalid"
 	}
@@ -76,6 +68,8 @@ func (t ValueType) internal() (internalvalue.Type, error) {
 		return internalvalue.DateTime, nil
 	case DurationType:
 		return internalvalue.Duration, nil
+	case EnumType:
+		return internalvalue.Enum, nil
 	default:
 		return internalvalue.Invalid, fmt.Errorf("%w: value type is invalid", ErrInvalidArgument)
 	}
@@ -97,6 +91,8 @@ func valueTypeFromInternal(valueType internalvalue.Type) ValueType {
 		return DateTimeType
 	case internalvalue.Duration:
 		return DurationType
+	case internalvalue.Enum:
+		return EnumType
 	default:
 		return 0
 	}

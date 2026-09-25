@@ -60,13 +60,24 @@ func (m TemporalMode) String() string {
 //
 // PropertyContract values are immutable after construction.
 type PropertyContract struct {
-	id           identity.UUID
-	name         string
-	valueType    value.Type
-	dimension    unit.Dimension
-	hasDimension bool
-	temporalMode TemporalMode
-	nullable     bool
+	id                identity.UUID
+	name              string
+	valueType         value.Type
+	enumDefinitionID  identity.UUID
+	hasEnumDefinition bool
+	dimension         unit.Dimension
+	hasDimension      bool
+	temporalMode      TemporalMode
+	nullable          bool
+}
+
+func NewEnumPropertyContract(id identity.UUID, name string, enumDefinitionID identity.UUID, dimension unit.Dimension, hasDimension bool, temporalMode TemporalMode, nullable bool) PropertyContract {
+	if enumDefinitionID.IsZero() {
+		panic("schema: enum definition id must not be zero")
+	}
+	result := NewPropertyContract(id, name, value.Enum, dimension, hasDimension, temporalMode, nullable)
+	result.enumDefinitionID, result.hasEnumDefinition = enumDefinitionID, true
+	return result
 }
 
 // NewPropertyContract constructs a PropertyContract.
@@ -141,6 +152,9 @@ func (c PropertyContract) Name() string {
 func (c PropertyContract) ValueType() value.Type {
 	return c.valueType
 }
+func (c PropertyContract) EnumDefinitionID() (identity.UUID, bool) {
+	return c.enumDefinitionID, c.hasEnumDefinition
+}
 
 // Dimension returns the dimension required by the contract.
 //
@@ -175,6 +189,13 @@ func (c PropertyContract) IsValid() bool {
 	}
 
 	if !c.valueType.IsValid() {
+		return false
+	}
+	if c.valueType == value.Enum {
+		if !c.hasEnumDefinition || c.enumDefinitionID.IsZero() {
+			return false
+		}
+	} else if c.hasEnumDefinition || !c.enumDefinitionID.IsZero() {
 		return false
 	}
 

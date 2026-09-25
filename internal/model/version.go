@@ -3,6 +3,7 @@ package model
 import (
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/constraint"
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/identity"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/invariant"
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/rule"
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/schema"
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/scope"
@@ -21,12 +22,14 @@ type ModelVersion struct {
 
 	precisionPolicy precision.Policy
 
-	entityTypes         []schema.EntityType
-	relationTypes       []schema.RelationType
-	traits              []schema.Trait
-	propertyContracts   []schema.PropertyContract
-	propertyDefinitions []schema.PropertyDefinition
-	scopeDefinitions    []scope.Definition
+	entityTypes          []schema.EntityType
+	enumDefinitions      []schema.EnumDefinition
+	entityKeyDefinitions []schema.EntityKeyDefinition
+	relationTypes        []schema.RelationType
+	traits               []schema.Trait
+	propertyContracts    []schema.PropertyContract
+	propertyDefinitions  []schema.PropertyDefinition
+	scopeDefinitions     []scope.Definition
 
 	entities  []semantic.Entity
 	relations []semantic.Relation
@@ -35,7 +38,8 @@ type ModelVersion struct {
 
 	constraints []constraint.Constraint
 
-	rules []rule.Rule
+	rules      []rule.Rule
+	invariants []invariant.Invariant
 
 	indexes indexes
 }
@@ -48,6 +52,8 @@ func newCommittedModelVersion(
 	versionLabel string,
 	precisionPolicy precision.Policy,
 	entityTypes []schema.EntityType,
+	enumDefinitions []schema.EnumDefinition,
+	entityKeyDefinitions []schema.EntityKeyDefinition,
 	relationTypes []schema.RelationType,
 	traits []schema.Trait,
 	propertyContracts []schema.PropertyContract,
@@ -58,6 +64,7 @@ func newCommittedModelVersion(
 	valueBindings []semantic.ValueBinding,
 	constraints []constraint.Constraint,
 	rules []rule.Rule,
+	invariants []invariant.Invariant,
 ) ModelVersion {
 	if id.IsZero() {
 		panic("model: committed model version id must not be zero")
@@ -91,6 +98,8 @@ func newCommittedModelVersion(
 		versionLabel,
 		precisionPolicy,
 		entityTypes,
+		enumDefinitions,
+		entityKeyDefinitions,
 		relationTypes,
 		traits,
 		propertyContracts,
@@ -101,6 +110,7 @@ func newCommittedModelVersion(
 		valueBindings,
 		constraints,
 		rules,
+		invariants,
 	)
 }
 
@@ -123,6 +133,8 @@ func newModelVersion(
 		"",
 		precision.Policy{},
 		entityTypes,
+		nil,
+		nil,
 		relationTypes,
 		traits,
 		propertyContracts,
@@ -131,6 +143,7 @@ func newModelVersion(
 		entities,
 		relations,
 		valueBindings,
+		nil,
 		nil,
 		nil,
 	)
@@ -144,6 +157,8 @@ func newModelVersionSnapshot(
 	versionLabel string,
 	precisionPolicy precision.Policy,
 	entityTypes []schema.EntityType,
+	enumDefinitions []schema.EnumDefinition,
+	entityKeyDefinitions []schema.EntityKeyDefinition,
 	relationTypes []schema.RelationType,
 	traits []schema.Trait,
 	propertyContracts []schema.PropertyContract,
@@ -154,8 +169,11 @@ func newModelVersionSnapshot(
 	valueBindings []semantic.ValueBinding,
 	constraints []constraint.Constraint,
 	rules []rule.Rule,
+	invariants []invariant.Invariant,
 ) ModelVersion {
 	entityTypes = cloneSlice(entityTypes)
+	enumDefinitions = cloneSlice(enumDefinitions)
+	entityKeyDefinitions = cloneSlice(entityKeyDefinitions)
 	relationTypes = cloneSlice(relationTypes)
 	traits = cloneSlice(traits)
 	propertyContracts = cloneSlice(propertyContracts)
@@ -166,6 +184,7 @@ func newModelVersionSnapshot(
 	valueBindings = cloneSlice(valueBindings)
 	constraints = cloneSlice(constraints)
 	rules = cloneSlice(rules)
+	invariants = cloneSlice(invariants)
 
 	result := ModelVersion{
 		id:              id,
@@ -175,20 +194,25 @@ func newModelVersionSnapshot(
 		versionLabel:    versionLabel,
 		precisionPolicy: precisionPolicy,
 
-		entityTypes:         entityTypes,
-		relationTypes:       relationTypes,
-		traits:              traits,
-		propertyContracts:   propertyContracts,
-		propertyDefinitions: propertyDefinitions,
-		scopeDefinitions:    scopeDefinitions,
-		entities:            entities,
-		relations:           relations,
-		valueBindings:       valueBindings,
-		constraints:         constraints,
-		rules:               rules,
+		entityTypes:          entityTypes,
+		enumDefinitions:      enumDefinitions,
+		entityKeyDefinitions: entityKeyDefinitions,
+		relationTypes:        relationTypes,
+		traits:               traits,
+		propertyContracts:    propertyContracts,
+		propertyDefinitions:  propertyDefinitions,
+		scopeDefinitions:     scopeDefinitions,
+		entities:             entities,
+		relations:            relations,
+		valueBindings:        valueBindings,
+		constraints:          constraints,
+		rules:                rules,
+		invariants:           invariants,
 
 		indexes: buildIndexes(
 			entityTypes,
+			enumDefinitions,
+			entityKeyDefinitions,
 			relationTypes,
 			traits,
 			propertyContracts,
@@ -198,6 +222,7 @@ func newModelVersionSnapshot(
 			relations,
 			constraints,
 			rules,
+			invariants,
 			valueBindings,
 		),
 	}
@@ -271,6 +296,11 @@ func (v ModelVersion) IsCommitted() bool {
 
 func (v ModelVersion) EntityTypes() []schema.EntityType {
 	return cloneSlice(v.entityTypes)
+}
+
+func (v ModelVersion) EnumDefinitions() []schema.EnumDefinition { return cloneSlice(v.enumDefinitions) }
+func (v ModelVersion) EntityKeyDefinitions() []schema.EntityKeyDefinition {
+	return cloneSlice(v.entityKeyDefinitions)
 }
 
 func (v ModelVersion) RelationTypes() []schema.RelationType {
@@ -348,6 +378,7 @@ func (v ModelVersion) Constraints() []constraint.Constraint {
 func (v ModelVersion) Rules() []rule.Rule {
 	return cloneSlice(v.rules)
 }
+func (v ModelVersion) Invariants() []invariant.Invariant { return cloneSlice(v.invariants) }
 
 func (v ModelVersion) EntityType(
 	id identity.UUID,
@@ -355,6 +386,14 @@ func (v ModelVersion) EntityType(
 	result, ok :=
 		v.indexes.entityTypeByID[id]
 
+	return result, ok
+}
+func (v ModelVersion) EnumDefinition(id identity.UUID) (schema.EnumDefinition, bool) {
+	result, ok := v.indexes.enumDefinitionByID[id]
+	return result, ok
+}
+func (v ModelVersion) EntityKeyDefinition(id identity.UUID) (schema.EntityKeyDefinition, bool) {
+	result, ok := v.indexes.entityKeyDefinitionByID[id]
 	return result, ok
 }
 
@@ -436,6 +475,10 @@ func (v ModelVersion) Rule(
 	result, ok :=
 		v.indexes.ruleByID[id]
 
+	return result, ok
+}
+func (v ModelVersion) Invariant(id identity.UUID) (invariant.Invariant, bool) {
+	result, ok := v.indexes.invariantByID[id]
 	return result, ok
 }
 

@@ -6,6 +6,7 @@ import (
 	"github.com/shmatovv/bcg-engine/v2/internal/expression/ast"
 	"github.com/shmatovv/bcg-engine/v2/internal/expression/typecheck"
 	"github.com/shmatovv/bcg-engine/v2/internal/expression/typing"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/value"
 )
 
 // ErrorKind identifies a recursive static inference failure.
@@ -247,6 +248,14 @@ func inferConstant(
 	}
 
 	typedValue := expression.Value()
+	if typedValue.Type() == value.Enum {
+		id, ok := typedValue.EnumDefinitionID()
+		if !ok {
+			return typing.Type{}, Error{kind: ErrorInvalidExpression}
+		}
+		u, has := typedValue.Unit(), typedValue.HasUnit()
+		return typing.NewQualifiedEnum(id, u, has, typing.TemporalScalar, false), nil
+	}
 
 	if typedValue.HasUnit() {
 		return typing.NewWithUnit(
