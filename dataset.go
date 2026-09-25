@@ -15,11 +15,18 @@ import (
 // absent relation is absent data, not data pending lazy loading. It is
 // intentionally runtime-only and is never serialized into a .bcg artifact.
 // Callers supply its stable ID and must not reuse that ID for changed contents.
-type Dataset struct{ value model.Dataset }
+type Dataset struct {
+	value       model.Dataset
+	modelDigest Digest
+}
 
 func (d Dataset) IsValid() bool      { return d.value.IsValid() }
 func (d Dataset) ID() ID             { return idFromInternal(d.value.ID()) }
 func (d Dataset) ModelVersionID() ID { return idFromInternal(d.value.ModelVersionID()) }
+
+// ModelSemanticDigest identifies the exact model semantics the Dataset was
+// built against. It is used with ModelVersionID when binding or decoding.
+func (d Dataset) ModelSemanticDigest() Digest { return d.modelDigest }
 
 // Entities returns a defensive deterministic copy of Dataset-owned entities.
 func (d Dataset) Entities() []Entity {
@@ -80,7 +87,10 @@ func (d Dataset) Relation(id ID) (Relation, bool) {
 // not concurrency-safe; the resulting Dataset is safe for concurrent reads.
 // datasetID is a caller-supplied immutable snapshot identity and must not be
 // reused for different Dataset contents.
-type DatasetBuilder struct{ value *model.DatasetBuilder }
+type DatasetBuilder struct {
+	value       *model.DatasetBuilder
+	modelDigest Digest
+}
 
 func NewDatasetBuilder(base Model, datasetID ID) (*DatasetBuilder, error) {
 	if !base.IsValid() || datasetID.IsZero() {
@@ -90,7 +100,7 @@ func NewDatasetBuilder(base Model, datasetID ID) (*DatasetBuilder, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrInvalidArgument, err)
 	}
-	return &DatasetBuilder{value: builder}, nil
+	return &DatasetBuilder{value: builder, modelDigest: base.SemanticDigest()}, nil
 }
 
 func (b *DatasetBuilder) IsValid() bool { return b != nil && b.value != nil && b.value.IsValid() }
@@ -152,5 +162,5 @@ func (b *DatasetBuilder) Build() (Dataset, error) {
 	if err != nil {
 		return Dataset{}, publicError(err)
 	}
-	return Dataset{value: value}, nil
+	return Dataset{value: value, modelDigest: b.modelDigest}, nil
 }

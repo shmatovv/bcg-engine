@@ -1,10 +1,48 @@
 package bcg_test
 
 import (
+	"sync"
 	"testing"
 
 	bcg "github.com/shmatovv/bcg-engine/v2"
 )
+
+func TestDatasetContentDigestIsIdentityIndependentAndDeterministic(t *testing.T) {
+	m, typ, _, _ := datasetInputModel(t, false)
+	e, err := bcg.NewEntity(bcg.EntitySpec{ID: bcg.NewID(), TypeID: typ})
+	if err != nil {
+		t.Fatal(err)
+	}
+	build := func() bcg.Dataset {
+		b, err := bcg.NewDatasetBuilder(m, bcg.NewID())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err = b.AddEntity(e); err != nil {
+			t.Fatal(err)
+		}
+		d, err := b.Build()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return d
+	}
+	a, b := build(), build()
+	if a.ContentDigest() != b.ContentDigest() {
+		t.Fatal("DatasetID affected content digest")
+	}
+	var wg sync.WaitGroup
+	for i := 0; i < 16; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if a.ContentDigest() != a.ContentDigest() {
+				t.Error("non-deterministic digest")
+			}
+		}()
+	}
+	wg.Wait()
+}
 
 func TestDatasetPatchAndRebasePublicWorkflow(t *testing.T) {
 	model, typeID, propertyID, _ := datasetInputModel(t, false)
@@ -23,6 +61,7 @@ func TestDatasetPatchAndRebasePublicWorkflow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	d1Digest := d1.ContentDigest()
 	validator := model.NewRuntimeValidator()
 	if report := validator.ValidateEntity(entity); !report.OK() {
 		t.Fatalf("local entity validation: %#v", report.Issues())
@@ -49,6 +88,9 @@ func TestDatasetPatchAndRebasePublicWorkflow(t *testing.T) {
 	}
 	if len(d1.Entities()) != 1 || len(d2.Entities()) != 2 || d1.ID() == d2.ID() {
 		t.Fatal("patch did not create an independent Dataset")
+	}
+	if d1Digest == d2.ContentDigest() {
+		t.Fatal("content-changing patch retained DatasetContentDigest")
 	}
 	snapshot, err := model.WithDataset(d2)
 	if err != nil {
@@ -99,6 +141,9 @@ func TestDatasetPatchAndRebasePublicWorkflow(t *testing.T) {
 	}
 	if d3.ModelVersionID() != v2.VersionID() || len(d3.Entities()) != 2 {
 		t.Fatal("rebase did not preserve data under target model")
+	}
+	if d3.ContentDigest() != d2.ContentDigest() || d3.ModelSemanticDigest() == d2.ModelSemanticDigest() {
+		t.Fatal("rebase did not preserve content identity while changing model identity")
 	}
 	_ = propertyID
 }

@@ -1308,6 +1308,15 @@ deterministic `.bcg`; `Decode`, `Unmarshal` читают его. `Artifact` да
 wire/semantic contract. Dataset и Dataset-bound Scenario сознательно не
 сериализуются.
 
+Dataset snapshots have a separate canonical `.bcgd` artifact: use
+`NewDatasetArtifact`, `MarshalDataset`/`EncodeDataset`, and
+`UnmarshalDataset`/`DecodeDataset`. A Dataset has a SHA-256
+`ContentDigest()` over runtime content only (not DatasetID), while `.bcgd`
+also records and verifies the exact `ModelVersionID` and
+`ModelSemanticDigest`. `.bcgd` never includes model schema, scenarios,
+function callbacks, caches, or platform metadata. The supplied Dataset is a
+complete evaluation world; artifact decoding does not introduce loading or IO.
+
 Проверяйте ошибки через `errors.Is`/`errors.As`:
 
 - `ErrInvalidArgument`, `ErrInvalidModel` — ошибка публичного вызова/wrapper;

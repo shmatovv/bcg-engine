@@ -37,6 +37,9 @@ func (m Model) WithDataset(dataset Dataset) (EvaluationSnapshot, error) {
 	if dataset.ModelVersionID() != m.VersionID() {
 		return EvaluationSnapshot{}, fmt.Errorf("%w: Dataset belongs to a different ModelVersion", ErrInvalidArgument)
 	}
+	if dataset.modelDigest == (Digest{}) || dataset.modelDigest != m.SemanticDigest() {
+		return EvaluationSnapshot{}, fmt.Errorf("%w: Dataset belongs to a semantically different Model", ErrInvalidArgument)
+	}
 	source, err := model.NewEvaluationSource(m.version, dataset.value)
 	if err != nil {
 		return EvaluationSnapshot{}, fmt.Errorf("%w: %v", ErrInvalidArgument, err)
