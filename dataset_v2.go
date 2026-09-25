@@ -251,6 +251,20 @@ func (s EvaluationSnapshot) CheckIntegrity(context CalculationContext) Integrity
 			}
 		}
 	}
+	for _, relation := range snapshotRelations(s) {
+		x, err := checkInvariantsForObjectSource(s.evaluationSource(), address.RelationRef(relation.value.ID()), ctx)
+		if err != nil {
+			continue
+		}
+		for _, v := range x.Results() {
+			if v.State() == InvariantViolated {
+				r.add(IntegrityIssue{kind: IntegrityInvariantViolated, declarationID: v.Invariant().ID(), hasDeclaration: true, objectID: v.SubjectID(), hasObject: true})
+			}
+			if v.State() == InvariantUndefined {
+				r.add(IntegrityIssue{kind: IntegrityInvariantUndefined, declarationID: v.Invariant().ID(), hasDeclaration: true, objectID: v.SubjectID(), hasObject: true})
+			}
+		}
+	}
 	r.sort()
 	return r
 }
