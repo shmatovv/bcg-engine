@@ -24,8 +24,9 @@ reads `.bcg v1` and writes canonical `.bcg v2` while adding public
 lossless inspection and Schema v2 declarations: UUID-identified Enums, Input
 presence policies, Entity keys, directional Relation cardinality, and
 subject-relative Invariants. Extension functions are represented by portable
-requirements and calls. Dataset patches/rebases and dependency planning remain
-deferred.
+requirements and calls. Dataset patches/rebases, evaluation dependency
+planning, and batch evaluation are available; final v2 hardening and API freeze
+remain deferred.
 
 Expression v2 currently adds deterministic state predicates (`IsDefined`,
 `IsUndefined`, `IsNull`), exact numeric transforms (`Abs`, `Round`, `Floor`,
@@ -98,6 +99,33 @@ calculation-override what-if analysis. Defined, Null, and Undefined are normal
 result states; a Go error indicates an invalid call or an engine failure.
 Select an artifact's Scenario with `calculation.WithScenario(scenario)`;
 evaluation validates that it belongs to the model version.
+
+## Evaluation planning and batches
+
+`Model.PlanEvaluation` accepts schema-level `PropertyTarget` values and returns
+an immutable `DependencyPlan`. It is the upstream counterpart to
+`AnalyzeImpact`: impact starts from a changed concrete source and finds
+downstream effects, while planning starts from requested property definitions
+and describes what may be needed to evaluate them. Plans expose requested and
+dependent definitions, known embedded addresses, entity/relation types,
+traversal direction plus filter/map dependencies, scope/effective-time needs,
+and reachable function requirements. `PlanEvaluationWithContext` additionally
+validates the selected context, but deliberately never drops a dependency based
+on unknown Dataset values.
+
+Traversal requirements are schema/topology requirements, not speculative
+record IDs. A host may use them to build a minimal Dataset closure. Once that
+Dataset is passed to `Model.WithDataset`, it is the complete evaluation world:
+missing relations or bindings are evaluated normally and are never lazy-loaded.
+
+`EvaluationSnapshot.EvaluateBatch(targets, context)` evaluates ordered
+`PropertyAddress` targets through one shared evaluator session. It preserves
+caller order and duplicate targets; every item independently remains Defined,
+Null, or Undefined. Its per-target semantics are the same as independent
+`Evaluate` calls under the same snapshot/runtime/context identity. Sessions
+also expose `EvaluateBatch` for warm repeated calls. Caches remain bound to the
+exact model semantic digest, dataset content, runtime function fingerprint, and
+calculation environment.
 
 ## Public model lifecycle
 

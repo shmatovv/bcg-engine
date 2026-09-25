@@ -178,6 +178,15 @@ func TestDatasetSnapshotEvaluatesDerivedPropertyAndSession(t *testing.T) {
 	if err != nil || len(many) != 2 {
 		t.Fatalf("Dataset.EvaluateMany = %#v, %v", many, err)
 	}
+	batch, err := snapshot.EvaluateBatch([]bcg.PropertyAddress{totalAddress, totalAddress}, context)
+	if err != nil || batch.Len() != 2 {
+		t.Fatalf("Dataset.EvaluateBatch = %#v, %v", batch, err)
+	}
+	for i, item := range batch.Items() {
+		if item.Target().ObjectID() != totalAddress.ObjectID() || item.Target().DefinitionID() != totalAddress.DefinitionID() || item.Result().State() != many[i].State() {
+			t.Fatalf("batch item %d = %#v", i, item)
+		}
+	}
 	assertDatasetDecimal(t, many[0], "5000")
 	session, err := snapshot.NewSession(context)
 	if err != nil {

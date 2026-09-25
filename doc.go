@@ -37,6 +37,14 @@
 // EvaluationSnapshot that uses the combined graph without changing the
 // model-only API or portable .bcg artifacts.
 //
+// Model.PlanEvaluation provides the upstream, schema-level complement to
+// AnalyzeImpact: it identifies property, topology, scope/time, and function
+// requirements that may be needed before a Dataset is assembled. Traversal
+// requirements never invent runtime records. A supplied Dataset is always the
+// complete evaluation world; this package has no lazy loading or resolver I/O.
+// EvaluationSnapshot.EvaluateBatch preserves ordered per-target results while
+// sharing one immutable snapshot source and evaluator session.
+//
 // ValueType describes scalar schema metadata, while Value holds an actual
 // defined value. Dimension and Unit provide exact, domain-neutral unit
 // primitives; BCG has no built-in business-unit catalog. Unit conversion

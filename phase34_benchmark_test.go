@@ -45,6 +45,56 @@ func BenchmarkPhase34FunctionCallSession(b *testing.B) {
 	}
 }
 
+func BenchmarkPhase34FunctionCallBatch(b *testing.B) {
+	model, target, context, runtime := phase34BenchmarkFunction(b)
+	builder := mustData[*bcg.DatasetBuilder](b)(bcg.NewDatasetBuilder(model, bcg.NewID()))
+	dataset := mustData[bcg.Dataset](b)(builder.Build())
+	snapshot := mustData[bcg.EvaluationSnapshot](b)(runtime.WithDataset(model, dataset))
+	targets := []bcg.PropertyAddress{target, target, target, target}
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, err := snapshot.EvaluateBatch(targets, context); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkPhase34FunctionCallRepeatedEvaluate(b *testing.B) {
+	model, target, context, runtime := phase34BenchmarkFunction(b)
+	builder := mustData[*bcg.DatasetBuilder](b)(bcg.NewDatasetBuilder(model, bcg.NewID()))
+	dataset := mustData[bcg.Dataset](b)(builder.Build())
+	snapshot := mustData[bcg.EvaluationSnapshot](b)(runtime.WithDataset(model, dataset))
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		for n := 0; n < 4; n++ {
+			if _, err := snapshot.Evaluate(target, context); err != nil {
+				b.Fatal(err)
+			}
+		}
+	}
+}
+
+func BenchmarkPhase34FunctionCallPlanEvaluation(b *testing.B) {
+	model, _, _, _ := phase34BenchmarkFunction(b)
+	var definition bcg.PropertyDefinition
+	for _, candidate := range model.PropertyDefinitionDeclarations() {
+		if candidate.Computation().Kind() == bcg.ComputationDerived {
+			definition = candidate
+			break
+		}
+	}
+	target := mustData[bcg.PropertyTarget](b)(bcg.PropertyDefinitionTarget(definition))
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, err := model.PlanEvaluation([]bcg.PropertyTarget{target}); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
 func BenchmarkPhase34QuantifiedAggregate(b *testing.B) {
 	relationType := bcg.MustParseID("00000000-0000-4000-8000-000000001005")
 	quantity := bcg.MustParseID("00000000-0000-4000-8000-000000001009")
