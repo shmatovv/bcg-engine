@@ -9,6 +9,7 @@ import (
 	"github.com/shmatovv/bcg-engine/v2/internal/expression/inference"
 	"github.com/shmatovv/bcg-engine/v2/internal/expression/typecheck"
 	"github.com/shmatovv/bcg-engine/v2/internal/expression/typing"
+	"github.com/shmatovv/bcg-engine/v2/internal/function"
 	"github.com/shmatovv/bcg-engine/v2/internal/types/value"
 )
 
@@ -35,6 +36,11 @@ func (r validationInferenceResolver) PropertyDefinition(
 ) (schema.PropertyDefinition, bool) {
 	v, ok := r.indexes.propertyDefinitionByID[id]
 	return v, ok
+}
+
+func (r validationInferenceResolver) FunctionRequirement(ref function.Ref) (function.Requirement, bool) {
+	value, ok := r.indexes.functionRequirementByRef[ref.Key()]
+	return value, ok
 }
 
 func (r validationInferenceResolver) PropertyContract(

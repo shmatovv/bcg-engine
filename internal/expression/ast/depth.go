@@ -136,6 +136,12 @@ func Depth(expression Expression) (int, bool) {
 			}
 			children = append(children, node.Operands()...)
 
+		case FunctionCall:
+			if !node.IsValid() {
+				return 0, false
+			}
+			children = append(children, node.Arguments()...)
+
 		default:
 			return 0, false
 		}

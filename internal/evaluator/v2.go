@@ -145,8 +145,26 @@ func (s *evaluationState) evaluateV2Binary(e ast.Binary, c expressionContext) (R
 		r = boolResolved(strings.HasPrefix(a.Raw().StringValue(), b.Raw().StringValue()))
 	case ast.BinaryOperatorEndsWith:
 		r = boolResolved(strings.HasSuffix(a.Raw().StringValue(), b.Raw().StringValue()))
+	case ast.BinaryOperatorAddDuration:
+		result, addErr := a.Raw().DateTime().Add(b.Raw().Duration())
+		if addErr != nil {
+			return Result{}, newError(ErrorInvariantViolation, "validated datetime addition could not be represented", addErr)
+		}
+		r = enginevalue.Defined(enginevalue.NewTyped(enginevalue.NewDateTime(result)))
+	case ast.BinaryOperatorSubtractDuration:
+		result, subtractErr := a.Raw().DateTime().Sub(b.Raw().Duration())
+		if subtractErr != nil {
+			return Result{}, newError(ErrorInvariantViolation, "validated datetime subtraction could not be represented", subtractErr)
+		}
+		r = enginevalue.Defined(enginevalue.NewTyped(enginevalue.NewDateTime(result)))
+	case ast.BinaryOperatorDifference:
+		result, differenceErr := a.Raw().DateTime().Difference(b.Raw().DateTime())
+		if differenceErr != nil {
+			return Result{}, newError(ErrorInvariantViolation, "validated datetime difference could not be represented", differenceErr)
+		}
+		r = enginevalue.Defined(enginevalue.NewTyped(enginevalue.NewDuration(result)))
 	default:
-		return Result{}, newError(ErrorUnsupportedExpression, "temporal operation is not supported by current temporal value implementation", nil)
+		return Result{}, newError(ErrorUnsupportedExpression, "invalid v2 binary operation", nil)
 	}
 	return newResult(r, p), nil
 }
@@ -168,12 +186,26 @@ func (s *evaluationState) evaluateV2Variadic(e ast.Variadic, c expressionContext
 			return newResult(enginevalue.Null(), provenance.NewOperation(e.Operator().String(), children[:i+1]...)), nil
 		}
 	}
-	if e.Operator() != ast.VariadicOperatorConcat {
-		return Result{}, newError(ErrorUnsupportedExpression, "scalar min/max evaluation is not implemented", nil)
+	switch e.Operator() {
+	case ast.VariadicOperatorConcat:
+		var b strings.Builder
+		for _, r := range results {
+			b.WriteString(r.value.Value().Raw().StringValue())
+		}
+		return newResult(enginevalue.Defined(enginevalue.NewTyped(enginevalue.NewString(b.String()))), provenance.NewOperation("Concat", children...)), nil
+	case ast.VariadicOperatorScalarMin, ast.VariadicOperatorScalarMax:
+		selected := results[0].value.Value()
+		for _, current := range results[1:] {
+			comparison, compareErr := compareDefined(current.value.Value(), selected)
+			if compareErr != nil {
+				return Result{}, compareErr
+			}
+			if (e.Operator() == ast.VariadicOperatorScalarMin && comparison < 0) || (e.Operator() == ast.VariadicOperatorScalarMax && comparison > 0) {
+				selected = current.value.Value()
+			}
+		}
+		return newResult(enginevalue.Defined(selected), provenance.NewOperation(e.Operator().String(), children...)), nil
+	default:
+		return Result{}, newError(ErrorInvariantViolation, "invalid v2 variadic operation", nil)
 	}
-	var b strings.Builder
-	for _, r := range results {
-		b.WriteString(r.value.Value().Raw().StringValue())
-	}
-	return newResult(enginevalue.Defined(enginevalue.NewTyped(enginevalue.NewString(b.String()))), provenance.NewOperation("Concat", children...)), nil
 }

@@ -6,6 +6,7 @@ import (
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/schema"
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/scope"
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/semantic"
+	"github.com/shmatovv/bcg-engine/v2/internal/function"
 )
 
 type validationIndexes struct {
@@ -26,7 +27,8 @@ type validationIndexes struct {
 
 	relationByID map[identity.UUID]semantic.Relation
 
-	constraintByID map[identity.UUID]constraint.Constraint
+	constraintByID           map[identity.UUID]constraint.Constraint
+	functionRequirementByRef map[string]function.Requirement
 }
 
 func buildValidationIndexes(
@@ -72,6 +74,7 @@ func buildValidationIndexes(
 			map[identity.UUID]constraint.Constraint,
 			len(d.constraints),
 		),
+		functionRequirementByRef: make(map[string]function.Requirement, len(d.functionRequirements)),
 	}
 
 	for _, entityType := range d.entityTypes {
@@ -147,6 +150,13 @@ func buildValidationIndexes(
 			modelConstraint.ID(),
 			modelConstraint,
 		)
+	}
+	for _, requirement := range d.functionRequirements {
+		if requirement.IsValid() {
+			if _, exists := result.functionRequirementByRef[requirement.Ref().Key()]; !exists {
+				result.functionRequirementByRef[requirement.Ref().Key()] = requirement
+			}
+		}
 	}
 
 	return result

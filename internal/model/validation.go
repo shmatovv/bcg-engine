@@ -23,6 +23,7 @@ const (
 	ValidationIssueInvalidEnumDefinition
 	ValidationIssueInvalidEntityKeyDefinition
 	ValidationIssueInvalidInvariant
+	ValidationIssueInvalidFunctionRequirement
 
 	ValidationIssueInvalidEntity
 	ValidationIssueInvalidRelation
@@ -38,6 +39,7 @@ const (
 	ValidationIssueDuplicateEnumDefinitionID
 	ValidationIssueDuplicateEntityKeyDefinitionID
 	ValidationIssueDuplicateInvariantID
+	ValidationIssueDuplicateFunctionRequirement
 
 	ValidationIssueDuplicateEntityID
 	ValidationIssueDuplicateRelationID
@@ -51,6 +53,7 @@ const (
 	ValidationIssueUnknownEnumDefinition
 	ValidationIssueUnknownEntityKeyDefinition
 	ValidationIssueUnknownInvariant
+	ValidationIssueUnknownFunctionRequirement
 
 	ValidationIssueUnknownEntity
 
@@ -108,7 +111,7 @@ func (k ValidationIssueKind) IsValid() bool {
 		ValidationIssueInvalidPropertyDefinition,
 		ValidationIssueInvalidScopeDefinition,
 		ValidationIssueInvalidConstraint,
-		ValidationIssueInvalidRule, ValidationIssueInvalidEnumDefinition, ValidationIssueInvalidEntityKeyDefinition, ValidationIssueInvalidInvariant,
+		ValidationIssueInvalidRule, ValidationIssueInvalidEnumDefinition, ValidationIssueInvalidEntityKeyDefinition, ValidationIssueInvalidInvariant, ValidationIssueInvalidFunctionRequirement,
 
 		ValidationIssueInvalidEntity,
 		ValidationIssueInvalidRelation,
@@ -120,7 +123,7 @@ func (k ValidationIssueKind) IsValid() bool {
 		ValidationIssueDuplicatePropertyDefinitionID,
 		ValidationIssueDuplicateScopeDefinitionID,
 		ValidationIssueDuplicateConstraintID,
-		ValidationIssueDuplicateRuleID, ValidationIssueDuplicateEnumDefinitionID, ValidationIssueDuplicateEntityKeyDefinitionID, ValidationIssueDuplicateInvariantID,
+		ValidationIssueDuplicateRuleID, ValidationIssueDuplicateEnumDefinitionID, ValidationIssueDuplicateEntityKeyDefinitionID, ValidationIssueDuplicateInvariantID, ValidationIssueDuplicateFunctionRequirement,
 
 		ValidationIssueDuplicateEntityID,
 		ValidationIssueDuplicateRelationID,
@@ -130,7 +133,7 @@ func (k ValidationIssueKind) IsValid() bool {
 		ValidationIssueUnknownTrait,
 		ValidationIssueUnknownPropertyContract,
 		ValidationIssueUnknownPropertyDefinition,
-		ValidationIssueUnknownScopeDefinition, ValidationIssueUnknownEnumDefinition, ValidationIssueUnknownEntityKeyDefinition, ValidationIssueUnknownInvariant,
+		ValidationIssueUnknownScopeDefinition, ValidationIssueUnknownEnumDefinition, ValidationIssueUnknownEntityKeyDefinition, ValidationIssueUnknownInvariant, ValidationIssueUnknownFunctionRequirement,
 
 		ValidationIssueUnknownEntity,
 
@@ -204,6 +207,8 @@ func (k ValidationIssueKind) String() string {
 		return "InvalidEntityKeyDefinition"
 	case ValidationIssueInvalidInvariant:
 		return "InvalidInvariant"
+	case ValidationIssueInvalidFunctionRequirement:
+		return "InvalidFunctionRequirement"
 	case ValidationIssueInvalidEntity:
 		return "InvalidEntity"
 	case ValidationIssueInvalidRelation:
@@ -230,6 +235,8 @@ func (k ValidationIssueKind) String() string {
 		return "DuplicateEntityKeyDefinitionID"
 	case ValidationIssueDuplicateInvariantID:
 		return "DuplicateInvariantID"
+	case ValidationIssueDuplicateFunctionRequirement:
+		return "DuplicateFunctionRequirement"
 	case ValidationIssueDuplicateEntityID:
 		return "DuplicateEntityID"
 	case ValidationIssueDuplicateRelationID:
@@ -252,6 +259,8 @@ func (k ValidationIssueKind) String() string {
 		return "UnknownEntityKeyDefinition"
 	case ValidationIssueUnknownInvariant:
 		return "UnknownInvariant"
+	case ValidationIssueUnknownFunctionRequirement:
+		return "UnknownFunctionRequirement"
 	case ValidationIssueUnknownEntity:
 		return "UnknownEntity"
 	case ValidationIssuePropertyOwnerNotFound:

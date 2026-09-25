@@ -456,6 +456,8 @@ func (s *evaluationState) evaluateExpression(
 		return s.evaluateV2Binary(expression, context)
 	case ast.Variadic:
 		return s.evaluateV2Variadic(expression, context)
+	case ast.FunctionCall:
+		return s.evaluateFunctionCall(expression, context)
 
 	default:
 		return Result{},

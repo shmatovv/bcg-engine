@@ -82,6 +82,8 @@ func (d *Draft) validate(includeDependencyGraph bool) ValidationReport {
 		indexes,
 	)
 
+	d.validateFunctionRequirements(&report, indexes)
+
 	d.validateExpressions(
 		&report,
 		indexes,

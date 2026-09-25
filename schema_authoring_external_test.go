@@ -503,7 +503,7 @@ func commitPublicSchema(t *testing.T, draft *bcg.Draft, versionID bcg.ID, label 
 	return model
 }
 
-func mustCommitOptions(t *testing.T, versionID bcg.ID, label string, policy bcg.PrecisionPolicy) bcg.CommitOptions {
+func mustCommitOptions(t testing.TB, versionID bcg.ID, label string, policy bcg.PrecisionPolicy) bcg.CommitOptions {
 	t.Helper()
 	options, err := bcg.NewCommitOptions(versionID, label, policy)
 	if err != nil {

@@ -5,9 +5,12 @@ import (
 	"sort"
 
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/address"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/identity"
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/invariant"
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/schema"
+	"github.com/shmatovv/bcg-engine/v2/internal/evaluator"
 	invariantcheck "github.com/shmatovv/bcg-engine/v2/internal/invariant/check"
+	"github.com/shmatovv/bcg-engine/v2/internal/runtime"
 )
 
 // EnumOptionSpec describes a stable named enum option.
@@ -375,15 +378,14 @@ func (m Model) checkInvariantObject(id ID, subject address.ObjectRef, context Ca
 	if !m.IsValid() {
 		return InvariantResult{}, fmt.Errorf("%w: model is invalid", ErrInvalidModel)
 	}
+	if err := DefaultRuntime().ValidateModel(m); err != nil {
+		return InvariantResult{}, err
+	}
 	ctx, err := context.internal()
 	if err != nil {
 		return InvariantResult{}, err
 	}
-	r, err := invariantcheck.One(m.version, id.value, subject, ctx)
-	if err != nil {
-		return InvariantResult{}, publicError(err)
-	}
-	return invariantResultFromInternal(r), nil
+	return checkInvariantObjectSource(evaluator.BindRuntime(m.version, DefaultRuntime()), id.value, subject, ctx)
 }
 func (m Model) CheckInvariantsForEntity(subject Entity, context CalculationContext) (InvariantReport, error) {
 	return m.checkInvariantsForObject(address.EntityRef(subject.value.ID()), context)
@@ -395,20 +397,14 @@ func (m Model) checkInvariantsForObject(subject address.ObjectRef, context Calcu
 	if !m.IsValid() {
 		return InvariantReport{}, fmt.Errorf("%w: model is invalid", ErrInvalidModel)
 	}
+	if err := DefaultRuntime().ValidateModel(m); err != nil {
+		return InvariantReport{}, err
+	}
 	ctx, err := context.internal()
 	if err != nil {
 		return InvariantReport{}, err
 	}
-	r, err := invariantcheck.ForObject(m.version, subject, ctx)
-	if err != nil {
-		return InvariantReport{}, publicError(err)
-	}
-	items := r.Results()
-	out := make([]InvariantResult, len(items))
-	for i, v := range items {
-		out[i] = invariantResultFromInternal(v)
-	}
-	return InvariantReport{out}, nil
+	return checkInvariantsForObjectSource(evaluator.BindRuntime(m.version, DefaultRuntime()), subject, ctx)
 }
 
 // CheckInvariants evaluates every invariant for every matching model object in
@@ -417,11 +413,39 @@ func (m Model) CheckInvariants(context CalculationContext) (InvariantReport, err
 	if !m.IsValid() {
 		return InvariantReport{}, fmt.Errorf("%w: model is invalid", ErrInvalidModel)
 	}
+	if err := DefaultRuntime().ValidateModel(m); err != nil {
+		return InvariantReport{}, err
+	}
 	ctx, err := context.internal()
 	if err != nil {
 		return InvariantReport{}, err
 	}
-	report, err := invariantcheck.All(m.version, ctx)
+	return checkAllInvariantsSource(evaluator.BindRuntime(m.version, DefaultRuntime()), ctx)
+}
+
+func checkInvariantObjectSource(source invariantcheck.Source, id identity.UUID, subject address.ObjectRef, context runtime.CalculationContext) (InvariantResult, error) {
+	r, err := invariantcheck.One(source, id, subject, context)
+	if err != nil {
+		return InvariantResult{}, publicError(err)
+	}
+	return invariantResultFromInternal(r), nil
+}
+
+func checkInvariantsForObjectSource(source invariantcheck.Source, subject address.ObjectRef, context runtime.CalculationContext) (InvariantReport, error) {
+	report, err := invariantcheck.ForObject(source, subject, context)
+	if err != nil {
+		return InvariantReport{}, publicError(err)
+	}
+	items := report.Results()
+	out := make([]InvariantResult, len(items))
+	for i, v := range items {
+		out[i] = invariantResultFromInternal(v)
+	}
+	return InvariantReport{out}, nil
+}
+
+func checkAllInvariantsSource(source invariantcheck.Source, context runtime.CalculationContext) (InvariantReport, error) {
+	report, err := invariantcheck.All(source, context)
 	if err != nil {
 		return InvariantReport{}, publicError(err)
 	}

@@ -3,6 +3,7 @@ package inference
 import (
 	"github.com/shmatovv/bcg-engine/v2/internal/expression/ast"
 	"github.com/shmatovv/bcg-engine/v2/internal/expression/typing"
+	"github.com/shmatovv/bcg-engine/v2/internal/function"
 	"github.com/shmatovv/bcg-engine/v2/internal/types/value"
 )
 
@@ -64,12 +65,12 @@ func inferV2Binary(e ast.Binary, c Context, r Resolver) (typing.Type, error) {
 		}
 		return typing.New(value.Bool).WithNullable(nullable), nil
 	case ast.BinaryOperatorAddDuration, ast.BinaryOperatorSubtractDuration:
-		if l.ValueType() != value.DateTime || q.ValueType() != value.Duration {
+		if l.ValueType() != value.DateTime || q.ValueType() != value.Duration || l.TemporalMode() != typing.TemporalScalar || q.TemporalMode() != typing.TemporalScalar || l.HasUnit() || q.HasUnit() {
 			return typing.Type{}, Error{kind: ErrorTypecheck}
 		}
 		return typing.New(value.DateTime).WithNullable(nullable), nil
 	case ast.BinaryOperatorDifference:
-		if l.ValueType() != value.DateTime || q.ValueType() != value.DateTime {
+		if l.ValueType() != value.DateTime || q.ValueType() != value.DateTime || l.TemporalMode() != typing.TemporalScalar || q.TemporalMode() != typing.TemporalScalar || l.HasUnit() || q.HasUnit() {
 			return typing.Type{}, Error{kind: ErrorTypecheck}
 		}
 		return typing.New(value.Duration).WithNullable(nullable), nil
@@ -82,6 +83,7 @@ func inferV2Variadic(e ast.Variadic, c Context, r Resolver) (typing.Type, error)
 	if err != nil {
 		return typing.Type{}, err
 	}
+	nullable := first.Nullable()
 	for _, x := range xs[1:] {
 		t, err := Infer(x, c, r)
 		if err != nil {
@@ -90,6 +92,7 @@ func inferV2Variadic(e ast.Variadic, c Context, r Resolver) (typing.Type, error)
 		if !sameV2Type(t, first) {
 			return typing.Type{}, Error{kind: ErrorTypecheck}
 		}
+		nullable = nullable || t.Nullable()
 	}
 	if e.Operator() == ast.VariadicOperatorConcat {
 		if first.ValueType() != value.String {
@@ -97,14 +100,14 @@ func inferV2Variadic(e ast.Variadic, c Context, r Resolver) (typing.Type, error)
 		}
 	}
 	if e.Operator() == ast.VariadicOperatorScalarMin || e.Operator() == ast.VariadicOperatorScalarMax {
-		if first.ValueType() != value.Integer && first.ValueType() != value.Decimal {
+		if (first.ValueType() != value.Integer && first.ValueType() != value.Decimal) || first.TemporalMode() != typing.TemporalScalar {
 			return typing.Type{}, Error{kind: ErrorTypecheck}
 		}
 	}
-	return first, nil
+	return first.WithNullable(nullable), nil
 }
 func sameV2Type(left, right typing.Type) bool {
-	if left.ValueType() != right.ValueType() || left.TemporalMode() != right.TemporalMode() || left.Nullable() != right.Nullable() || left.HasUnit() != right.HasUnit() {
+	if left.ValueType() != right.ValueType() || left.TemporalMode() != right.TemporalMode() || left.HasUnit() != right.HasUnit() {
 		return false
 	}
 	if left.HasUnit() {
@@ -117,4 +120,44 @@ func sameV2Type(left, right typing.Type) bool {
 	a, aok := left.EnumDefinitionID()
 	b, bok := right.EnumDefinitionID()
 	return aok == bok && (!aok || a == b)
+}
+
+func inferFunctionCall(e ast.FunctionCall, c Context, r Resolver) (typing.Type, error) {
+	if !e.IsValid() {
+		return typing.Type{}, Error{kind: ErrorInvalidExpression}
+	}
+	lookup, supported := r.(interface {
+		FunctionRequirement(function.Ref) (function.Requirement, bool)
+	})
+	if !supported {
+		return typing.Type{}, Error{kind: ErrorTypecheck}
+	}
+	requirement, ok := lookup.FunctionRequirement(e.Ref())
+	if !ok || !requirement.IsValid() {
+		return typing.Type{}, Error{kind: ErrorTypecheck}
+	}
+	parameters := requirement.Signature().Parameters()
+	arguments := e.Arguments()
+	if len(parameters) != len(arguments) {
+		return typing.Type{}, Error{kind: ErrorTypecheck}
+	}
+	nullable := requirement.Signature().NullableResult()
+	for index, argument := range arguments {
+		actual, err := Infer(argument, c, r)
+		if err != nil {
+			return typing.Type{}, Error{kind: ErrorChildInference, cause: err}
+		}
+		if !sameFunctionType(actual, parameters[index]) {
+			return typing.Type{}, Error{kind: ErrorTypecheck}
+		}
+		nullable = nullable || actual.Nullable()
+	}
+	return requirement.Signature().Result().WithNullable(nullable), nil
+}
+
+// Function parameters receive only Defined values. Nullability therefore does
+// not affect argument compatibility; it only makes the resulting Call
+// nullable through ordinary propagation.
+func sameFunctionType(actual, expected typing.Type) bool {
+	return sameV2Type(actual.WithNullable(false), expected.WithNullable(false))
 }

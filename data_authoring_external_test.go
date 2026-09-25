@@ -634,7 +634,7 @@ func bindingForTarget(t *testing.T, bindings []bcg.ValueBinding, address bcg.Pro
 	return bcg.ValueBinding{}
 }
 
-func mustPolicy(t *testing.T) bcg.PrecisionPolicy {
+func mustPolicy(t testing.TB) bcg.PrecisionPolicy {
 	return mustData[bcg.PrecisionPolicy](t)(bcg.NewPrecisionPolicy(8, bcg.RoundHalfEven))
 }
 
@@ -648,7 +648,7 @@ func commitOptions(t *testing.T, version bcg.ID, label string, policy bcg.Precis
 	return mustData[bcg.CommitOptions](t)(bcg.NewCommitOptions(version, label, policy))
 }
 
-func mustData[T any](t *testing.T) func(T, error) T {
+func mustData[T any](t testing.TB) func(T, error) T {
 	t.Helper()
 	return func(value T, err error) T {
 		if err != nil {

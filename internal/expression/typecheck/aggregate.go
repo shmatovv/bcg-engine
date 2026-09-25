@@ -169,6 +169,25 @@ func InferAggregate(
 
 		return mapType, nil
 
+	case ast.AggregateOperationExists:
+		if hasMap {
+			return typing.Type{}, AggregateError{kind: AggregateErrorInvalidMapType}
+		}
+		return typing.New(value.Bool), nil
+
+	case ast.AggregateOperationAny,
+		ast.AggregateOperationAll:
+		if !hasMap || !isBoolean(mapType) || mapType.TemporalMode() != typing.TemporalScalar {
+			return typing.Type{}, AggregateError{kind: AggregateErrorInvalidMapType}
+		}
+		return typing.New(value.Bool).WithNullable(mapType.Nullable()), nil
+
+	case ast.AggregateOperationDistinctCount:
+		if !hasMap || !mapType.IsValid() || mapType.TemporalMode() != typing.TemporalScalar {
+			return typing.Type{}, AggregateError{kind: AggregateErrorInvalidMapType}
+		}
+		return typing.New(value.Integer).WithNullable(mapType.Nullable()), nil
+
 	default:
 		return typing.Type{}, AggregateError{
 			kind: AggregateErrorInvalidOperation,

@@ -10,6 +10,10 @@ const (
 	AggregateOperationCount
 	AggregateOperationMin
 	AggregateOperationMax
+	AggregateOperationExists
+	AggregateOperationAny
+	AggregateOperationAll
+	AggregateOperationDistinctCount
 )
 
 // IsValid reports whether o is a valid aggregate operation.
@@ -19,7 +23,11 @@ func (o AggregateOperation) IsValid() bool {
 		AggregateOperationAverage,
 		AggregateOperationCount,
 		AggregateOperationMin,
-		AggregateOperationMax:
+		AggregateOperationMax,
+		AggregateOperationExists,
+		AggregateOperationAny,
+		AggregateOperationAll,
+		AggregateOperationDistinctCount:
 		return true
 	default:
 		return false
@@ -29,13 +37,16 @@ func (o AggregateOperation) IsValid() bool {
 // RequiresMap reports whether the operation requires a map expression.
 //
 // Count operates directly on traversal items.
-// Sum, Average, Min and Max operate on mapped values.
+// Sum, Average, Min, Max, Any, All and DistinctCount operate on mapped values.
 func (o AggregateOperation) RequiresMap() bool {
 	switch o {
 	case AggregateOperationSum,
 		AggregateOperationAverage,
 		AggregateOperationMin,
-		AggregateOperationMax:
+		AggregateOperationMax,
+		AggregateOperationAny,
+		AggregateOperationAll,
+		AggregateOperationDistinctCount:
 		return true
 	default:
 		return false
@@ -55,6 +66,14 @@ func (o AggregateOperation) String() string {
 		return "Min"
 	case AggregateOperationMax:
 		return "Max"
+	case AggregateOperationExists:
+		return "Exists"
+	case AggregateOperationAny:
+		return "Any"
+	case AggregateOperationAll:
+		return "All"
+	case AggregateOperationDistinctCount:
+		return "DistinctCount"
 	default:
 		return "Invalid"
 	}
@@ -127,6 +146,25 @@ func NewFilteredCountAggregate(
 		hasFilter: true,
 		operation: AggregateOperationCount,
 	}
+}
+
+// NewCountLikeAggregate constructs a mapless Count or Exists aggregate.
+func NewCountLikeAggregate(source TraversalSource, operation AggregateOperation) Aggregate {
+	validateAggregateSource(source)
+	if operation != AggregateOperationCount && operation != AggregateOperationExists {
+		panic("ast: invalid mapless aggregate operation")
+	}
+	return Aggregate{source: source, operation: operation}
+}
+
+// NewFilteredCountLikeAggregate constructs a filtered Count or Exists aggregate.
+func NewFilteredCountLikeAggregate(source TraversalSource, filter Expression, operation AggregateOperation) Aggregate {
+	validateAggregateSource(source)
+	validateAggregateFilter(filter)
+	if operation != AggregateOperationCount && operation != AggregateOperationExists {
+		panic("ast: invalid mapless aggregate operation")
+	}
+	return Aggregate{source: source, filter: filter, hasFilter: true, operation: operation}
 }
 
 // NewMappedAggregate constructs an unfiltered Sum, Average, Min or Max
@@ -213,13 +251,16 @@ func (e Aggregate) IsValid() bool {
 	}
 
 	switch e.operation {
-	case AggregateOperationCount:
+	case AggregateOperationCount, AggregateOperationExists:
 		return !e.hasMap && e.mapExpr == nil
 
 	case AggregateOperationSum,
 		AggregateOperationAverage,
 		AggregateOperationMin,
-		AggregateOperationMax:
+		AggregateOperationMax,
+		AggregateOperationAny,
+		AggregateOperationAll,
+		AggregateOperationDistinctCount:
 		return e.hasMap && e.mapExpr != nil
 
 	default:

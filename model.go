@@ -63,15 +63,7 @@ func (m Model) VersionLabel() string { return m.version.VersionLabel() }
 
 // Evaluate evaluates one scalar property with no persistent runtime cache.
 func (m Model) Evaluate(target PropertyAddress, context CalculationContext) (Result, error) {
-	version, addressValue, contextValue, err := m.request(target, context)
-	if err != nil {
-		return Result{}, err
-	}
-	result, err := evaluator.Evaluate(version, addressValue, contextValue)
-	if err != nil {
-		return Result{}, publicError(err)
-	}
-	return resultFromInternal(result), nil
+	return DefaultRuntime().Evaluate(m, target, context)
 }
 
 // EvaluateMany evaluates scalar targets in caller order. Duplicate targets are
@@ -79,6 +71,9 @@ func (m Model) Evaluate(target PropertyAddress, context CalculationContext) (Res
 func (m Model) EvaluateMany(targets []PropertyAddress, context CalculationContext) ([]Result, error) {
 	if !m.IsValid() {
 		return nil, fmt.Errorf("%w: model is invalid", ErrInvalidModel)
+	}
+	if err := DefaultRuntime().ValidateModel(m); err != nil {
+		return nil, err
 	}
 	contextValue, err := context.internal()
 	if err != nil {
@@ -90,7 +85,7 @@ func (m Model) EvaluateMany(targets []PropertyAddress, context CalculationContex
 	if len(targets) == 0 {
 		return []Result{}, nil
 	}
-	session, err := evaluator.NewSession(m.version)
+	session, err := evaluator.NewSession(evaluator.BindRuntime(m.version, DefaultRuntime()))
 	if err != nil {
 		return nil, publicError(err)
 	}
@@ -111,6 +106,9 @@ func (m Model) EvaluateMany(targets []PropertyAddress, context CalculationContex
 
 // EvaluateSeries evaluates a Series property through the established Series evaluator.
 func (m Model) EvaluateSeries(target PropertyAddress, context CalculationContext) (SeriesResult, error) {
+	if err := DefaultRuntime().ValidateModel(m); err != nil {
+		return SeriesResult{}, err
+	}
 	version, addressValue, contextValue, err := m.request(target, context)
 	if err != nil {
 		return SeriesResult{}, err
@@ -124,11 +122,14 @@ func (m Model) EvaluateSeries(target PropertyAddress, context CalculationContext
 
 // Explain evaluates one scalar property and returns actual structured provenance.
 func (m Model) Explain(target PropertyAddress, context CalculationContext) (Explanation, error) {
+	if err := DefaultRuntime().ValidateModel(m); err != nil {
+		return Explanation{}, err
+	}
 	version, addressValue, contextValue, err := m.request(target, context)
 	if err != nil {
 		return Explanation{}, err
 	}
-	explained, err := evaluator.Explain(version, addressValue, contextValue)
+	explained, err := evaluator.Explain(evaluator.BindRuntime(version, DefaultRuntime()), addressValue, contextValue)
 	if err != nil {
 		return Explanation{}, publicError(err)
 	}
@@ -137,6 +138,9 @@ func (m Model) Explain(target PropertyAddress, context CalculationContext) (Expl
 
 // ExplainSeries returns per-sample actual Series provenance.
 func (m Model) ExplainSeries(target PropertyAddress, context CalculationContext) (SeriesExplanation, error) {
+	if err := DefaultRuntime().ValidateModel(m); err != nil {
+		return SeriesExplanation{}, err
+	}
 	version, addressValue, contextValue, err := m.request(target, context)
 	if err != nil {
 		return SeriesExplanation{}, err
@@ -153,6 +157,9 @@ func (m Model) AnalyzeImpact(mode ImpactMode, source PropertyAddress, context Ca
 	if !m.IsValid() {
 		return ImpactResult{}, fmt.Errorf("%w: model is invalid", ErrInvalidModel)
 	}
+	if err := DefaultRuntime().ValidateModel(m); err != nil {
+		return ImpactResult{}, err
+	}
 	addressValue, err := source.internal()
 	if err != nil {
 		return ImpactResult{}, err
@@ -165,13 +172,14 @@ func (m Model) AnalyzeImpact(mode ImpactMode, source PropertyAddress, context Ca
 		return ImpactResult{}, err
 	}
 	var result impact.Result
+	runtimeSource := evaluator.BindRuntime(m.version, DefaultRuntime())
 	switch mode {
 	case StructuralImpact:
-		result, err = impact.AnalyzeStructural(m.version, addressValue)
+		result, err = impact.AnalyzeStructuralSource(runtimeSource, addressValue)
 	case EffectiveImpact:
-		result, err = impact.AnalyzeEffective(m.version, addressValue, contextValue)
+		result, err = impact.AnalyzeEffectiveSource(runtimeSource, addressValue, contextValue)
 	case ObservedImpact:
-		result, err = impact.AnalyzeObserved(m.version, addressValue, contextValue)
+		result, err = impact.AnalyzeObservedSource(runtimeSource, addressValue, contextValue)
 	default:
 		return ImpactResult{}, fmt.Errorf("%w: impact mode is invalid", ErrInvalidArgument)
 	}
@@ -186,6 +194,9 @@ func (m Model) CheckConstraint(id ID, context CalculationContext) (ConstraintRes
 	if !m.IsValid() {
 		return ConstraintResult{}, fmt.Errorf("%w: model is invalid", ErrInvalidModel)
 	}
+	if err := DefaultRuntime().ValidateModel(m); err != nil {
+		return ConstraintResult{}, err
+	}
 	constraintID, err := id.internal()
 	if err != nil {
 		return ConstraintResult{}, err
@@ -197,7 +208,7 @@ func (m Model) CheckConstraint(id ID, context CalculationContext) (ConstraintRes
 	if err := m.validateContext(contextValue); err != nil {
 		return ConstraintResult{}, err
 	}
-	result, err := constraintcheck.One(m.version, constraintID, contextValue)
+	result, err := constraintcheck.One(evaluator.BindRuntime(m.version, DefaultRuntime()), constraintID, contextValue)
 	if err != nil {
 		return ConstraintResult{}, publicError(err)
 	}
@@ -209,6 +220,9 @@ func (m Model) CheckConstraints(context CalculationContext) (ConstraintReport, e
 	if !m.IsValid() {
 		return ConstraintReport{}, fmt.Errorf("%w: model is invalid", ErrInvalidModel)
 	}
+	if err := DefaultRuntime().ValidateModel(m); err != nil {
+		return ConstraintReport{}, err
+	}
 	contextValue, err := context.internal()
 	if err != nil {
 		return ConstraintReport{}, err
@@ -216,7 +230,7 @@ func (m Model) CheckConstraints(context CalculationContext) (ConstraintReport, e
 	if err := m.validateContext(contextValue); err != nil {
 		return ConstraintReport{}, err
 	}
-	report, err := constraintcheck.All(m.version, contextValue)
+	report, err := constraintcheck.All(evaluator.BindRuntime(m.version, DefaultRuntime()), contextValue)
 	if err != nil {
 		return ConstraintReport{}, publicError(err)
 	}
@@ -228,6 +242,9 @@ func (m Model) CheckFeasibility(context CalculationContext) (FeasibilityResult, 
 	if !m.IsValid() {
 		return FeasibilityResult{}, fmt.Errorf("%w: model is invalid", ErrInvalidModel)
 	}
+	if err := DefaultRuntime().ValidateModel(m); err != nil {
+		return FeasibilityResult{}, err
+	}
 	contextValue, err := context.internal()
 	if err != nil {
 		return FeasibilityResult{}, err
@@ -235,7 +252,7 @@ func (m Model) CheckFeasibility(context CalculationContext) (FeasibilityResult, 
 	if err := m.validateContext(contextValue); err != nil {
 		return FeasibilityResult{}, err
 	}
-	result, err := feasibility.Evaluate(m.version, contextValue)
+	result, err := feasibility.Evaluate(evaluator.BindRuntime(m.version, DefaultRuntime()), contextValue)
 	if err != nil {
 		return FeasibilityResult{}, publicError(err)
 	}
@@ -246,6 +263,9 @@ func (m Model) CheckFeasibility(context CalculationContext) (FeasibilityResult, 
 func (m Model) EvaluateRule(id ID, context CalculationContext) (RuleResult, error) {
 	if !m.IsValid() {
 		return RuleResult{}, fmt.Errorf("%w: model is invalid", ErrInvalidModel)
+	}
+	if err := DefaultRuntime().ValidateModel(m); err != nil {
+		return RuleResult{}, err
 	}
 	ruleID, err := id.internal()
 	if err != nil {
@@ -258,7 +278,7 @@ func (m Model) EvaluateRule(id ID, context CalculationContext) (RuleResult, erro
 	if err := m.validateContext(contextValue); err != nil {
 		return RuleResult{}, err
 	}
-	result, err := ruleeval.One(m.version, ruleID, contextValue)
+	result, err := ruleeval.One(evaluator.BindRuntime(m.version, DefaultRuntime()), ruleID, contextValue)
 	if err != nil {
 		return RuleResult{}, publicError(err)
 	}
@@ -270,6 +290,9 @@ func (m Model) EvaluateRules(context CalculationContext) (RuleReport, error) {
 	if !m.IsValid() {
 		return RuleReport{}, fmt.Errorf("%w: model is invalid", ErrInvalidModel)
 	}
+	if err := DefaultRuntime().ValidateModel(m); err != nil {
+		return RuleReport{}, err
+	}
 	contextValue, err := context.internal()
 	if err != nil {
 		return RuleReport{}, err
@@ -277,7 +300,7 @@ func (m Model) EvaluateRules(context CalculationContext) (RuleReport, error) {
 	if err := m.validateContext(contextValue); err != nil {
 		return RuleReport{}, err
 	}
-	report, err := ruleeval.All(m.version, contextValue)
+	report, err := ruleeval.All(evaluator.BindRuntime(m.version, DefaultRuntime()), contextValue)
 	if err != nil {
 		return RuleReport{}, publicError(err)
 	}
@@ -289,6 +312,9 @@ func (m Model) NewSession(context CalculationContext) (*Session, error) {
 	if !m.IsValid() {
 		return nil, fmt.Errorf("%w: model is invalid", ErrInvalidModel)
 	}
+	if err := DefaultRuntime().ValidateModel(m); err != nil {
+		return nil, err
+	}
 	contextValue, err := context.internal()
 	if err != nil {
 		return nil, err
@@ -296,7 +322,7 @@ func (m Model) NewSession(context CalculationContext) (*Session, error) {
 	if err := m.validateContext(contextValue); err != nil {
 		return nil, err
 	}
-	session, err := evaluator.NewSession(m.version)
+	session, err := evaluator.NewSession(evaluator.BindRuntime(m.version, DefaultRuntime()))
 	if err != nil {
 		return nil, publicError(err)
 	}

@@ -200,6 +200,44 @@ func reconstructExpression(expression bcg.Expression) (bcg.Expression, error) {
 		case bcg.UnaryIsNull:
 			return bcg.IsNull(operand)
 		}
+	case bcg.ExpressionUnaryV2:
+		operation, _ := expression.UnaryV2Operation()
+		operand, err := reconstructExpression(operation.Operand())
+		if err != nil {
+			return bcg.Expression{}, err
+		}
+		switch operation.Operation() {
+		case bcg.UnaryIsDefined:
+			return bcg.IsDefined(operand)
+		case bcg.UnaryIsUndefined:
+			return bcg.IsUndefined(operand)
+		case bcg.UnaryAbs:
+			return bcg.Abs(operand)
+		case bcg.UnaryRound:
+			return bcg.Round(operand)
+		case bcg.UnaryFloor:
+			return bcg.Floor(operand)
+		case bcg.UnaryCeil:
+			return bcg.Ceil(operand)
+		case bcg.UnaryLength:
+			return bcg.Length(operand)
+		case bcg.UnaryLower:
+			return bcg.Lower(operand)
+		case bcg.UnaryUpper:
+			return bcg.Upper(operand)
+		case bcg.UnaryTrim:
+			return bcg.Trim(operand)
+		case bcg.UnaryYear:
+			return bcg.Year(operand)
+		case bcg.UnaryMonth:
+			return bcg.Month(operand)
+		case bcg.UnaryDay:
+			return bcg.Day(operand)
+		case bcg.UnaryHour:
+			return bcg.Hour(operand)
+		case bcg.UnaryMinute:
+			return bcg.Minute(operand)
+		}
 	case bcg.ExpressionArithmetic, bcg.ExpressionComparison, bcg.ExpressionLogical:
 		operation, _ := expression.BinaryOperation()
 		left, err := reconstructExpression(operation.Left())
@@ -236,6 +274,63 @@ func reconstructExpression(expression bcg.Expression) (bcg.Expression, error) {
 		case bcg.BinaryOr:
 			return bcg.Or(left, right)
 		}
+	case bcg.ExpressionBinaryV2:
+		operation, _ := expression.BinaryV2Operation()
+		left, err := reconstructExpression(operation.Left())
+		if err != nil {
+			return bcg.Expression{}, err
+		}
+		right, err := reconstructExpression(operation.Right())
+		if err != nil {
+			return bcg.Expression{}, err
+		}
+		switch operation.Operation() {
+		case bcg.BinaryModulo:
+			return bcg.Modulo(left, right)
+		case bcg.BinaryContains:
+			return bcg.Contains(left, right)
+		case bcg.BinaryStartsWith:
+			return bcg.StartsWith(left, right)
+		case bcg.BinaryEndsWith:
+			return bcg.EndsWith(left, right)
+		case bcg.BinaryAddDuration:
+			return bcg.AddDuration(left, right)
+		case bcg.BinarySubtractDuration:
+			return bcg.SubtractDuration(left, right)
+		case bcg.BinaryDifference:
+			return bcg.Difference(left, right)
+		}
+	case bcg.ExpressionVariadicV2:
+		operation, _ := expression.VariadicV2Operation()
+		operands := operation.Operands()
+		rebuilt := make([]bcg.Expression, len(operands))
+		for index, operand := range operands {
+			var err error
+			rebuilt[index], err = reconstructExpression(operand)
+			if err != nil {
+				return bcg.Expression{}, err
+			}
+		}
+		switch operation.Operation() {
+		case bcg.VariadicConcat:
+			return bcg.Concat(rebuilt...)
+		case bcg.VariadicScalarMin:
+			return bcg.ScalarMin(rebuilt...)
+		case bcg.VariadicScalarMax:
+			return bcg.ScalarMax(rebuilt...)
+		}
+	case bcg.ExpressionFunctionCall:
+		call, _ := expression.FunctionCall()
+		arguments := call.Arguments()
+		rebuilt := make([]bcg.Expression, len(arguments))
+		for index, argument := range arguments {
+			var err error
+			rebuilt[index], err = reconstructExpression(argument)
+			if err != nil {
+				return bcg.Expression{}, err
+			}
+		}
+		return bcg.CallFunction(call.Ref(), rebuilt...)
 	case bcg.ExpressionIf, bcg.ExpressionCoalesce:
 		operation, _ := expression.ConditionalOperation()
 		if operation.Kind() == bcg.ConditionalIf {
@@ -293,6 +388,12 @@ func reconstructExpression(expression bcg.Expression) (bcg.Expression, error) {
 			}
 			return bcg.Count(source)
 		}
+		if aggregate.Operation() == bcg.AggregateExists {
+			if hasFilter {
+				return bcg.FilteredExists(source, filter)
+			}
+			return bcg.Exists(source)
+		}
 		if !hasMap {
 			return bcg.Expression{}, fmt.Errorf("mapped aggregate has no map")
 		}
@@ -327,6 +428,11 @@ func reconstructModel(t *testing.T, source bcg.Model) (bcg.Model, error) {
 	draft, err := logical.Draft()
 	if err != nil {
 		return bcg.Model{}, err
+	}
+	for _, requirement := range source.FunctionRequirements() {
+		if err := draft.AddFunctionRequirement(requirement); err != nil {
+			return bcg.Model{}, err
+		}
 	}
 	for _, value := range source.PropertyContractDefinitions() {
 		if err := draft.AddPropertyContract(rebuildContract(value)); err != nil {

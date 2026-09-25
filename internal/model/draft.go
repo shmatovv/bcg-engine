@@ -8,6 +8,7 @@ import (
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/schema"
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/scope"
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/semantic"
+	"github.com/shmatovv/bcg-engine/v2/internal/function"
 )
 
 // Draft is a mutable-in-the-large description of a model before commit.
@@ -40,6 +41,11 @@ type Draft struct {
 	// Declarative side-effect-free rules.
 	rules      []rule.Rule
 	invariants []invariant.Invariant
+
+	// Function requirements are authoring declarations used to typecheck
+	// FunctionCall. Commit retains only the canonical subset reached from
+	// persistent expressions.
+	functionRequirements []function.Requirement
 }
 
 // NewDraft constructs an empty model draft.
@@ -78,6 +84,7 @@ func NewDraftFromVersion(version ModelVersion) *Draft {
 		constraints:          version.Constraints(),
 		rules:                version.Rules(),
 		invariants:           version.Invariants(),
+		functionRequirements: version.FunctionRequirements(),
 	}
 }
 
@@ -92,6 +99,14 @@ func (d *Draft) AddEntityKeyDefinition(value schema.EntityKeyDefinition) {
 func (d *Draft) AddInvariant(value invariant.Invariant) {
 	d.requireNonNil()
 	d.invariants = append(d.invariants, value)
+}
+func (d *Draft) AddFunctionRequirement(value function.Requirement) {
+	d.requireNonNil()
+	d.functionRequirements = append(d.functionRequirements, value)
+}
+func (d *Draft) FunctionRequirements() []function.Requirement {
+	d.requireNonNil()
+	return cloneSlice(d.functionRequirements)
 }
 
 func (d *Draft) AddEntityType(

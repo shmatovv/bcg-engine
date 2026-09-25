@@ -28,6 +28,7 @@ const (
 	ErrorEvaluationCycle
 	ErrorEvaluationDepthExceeded
 	ErrorInvariantViolation
+	ErrorFunctionRuntime
 )
 
 func (k ErrorKind) IsValid() bool {
@@ -48,7 +49,8 @@ func (k ErrorKind) IsValid() bool {
 		ErrorInvalidEvaluationPlan,
 		ErrorEvaluationCycle,
 		ErrorEvaluationDepthExceeded,
-		ErrorInvariantViolation:
+		ErrorInvariantViolation,
+		ErrorFunctionRuntime:
 
 		return true
 
@@ -108,6 +110,8 @@ func (k ErrorKind) String() string {
 
 	case ErrorInvariantViolation:
 		return "InvariantViolation"
+	case ErrorFunctionRuntime:
+		return "FunctionRuntime"
 
 	default:
 		return "Invalid"

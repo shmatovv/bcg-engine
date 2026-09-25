@@ -43,11 +43,12 @@ const (
 	ExpressionUnaryV2
 	ExpressionBinaryV2
 	ExpressionVariadicV2
+	ExpressionFunctionCall
 )
 
 // IsValid reports whether k identifies a supported v1 expression node.
 func (k ExpressionKind) IsValid() bool {
-	return k >= ExpressionConstant && k <= ExpressionVariadicV2
+	return k >= ExpressionConstant && k <= ExpressionFunctionCall
 }
 
 // String returns the stable node name, or "Invalid".
@@ -87,6 +88,8 @@ func (k ExpressionKind) String() string {
 		return "Binary"
 	case ExpressionVariadicV2:
 		return "Variadic"
+	case ExpressionFunctionCall:
+		return "FunctionCall"
 	default:
 		return "Invalid"
 	}
@@ -133,6 +136,8 @@ func (e Expression) Kind() ExpressionKind {
 		return ExpressionBinaryV2
 	case ast.Variadic:
 		return ExpressionVariadicV2
+	case ast.FunctionCall:
+		return ExpressionFunctionCall
 	default:
 		return 0
 	}
@@ -176,6 +181,8 @@ func (e Expression) Children() []Expression {
 		nodes = []ast.Expression{node.Left(), node.Right()}
 	case ast.Variadic:
 		nodes = node.Operands()
+	case ast.FunctionCall:
+		nodes = node.Arguments()
 	}
 	result := make([]Expression, len(nodes))
 	for i, node := range nodes {
@@ -941,6 +948,52 @@ func ScalarMax(operands ...Expression) (Expression, error) {
 	return variadicV2(VariadicScalarMax, operands...)
 }
 
+// FunctionCallExpression is the immutable public view of a FunctionCall.
+// Requirement signatures are model-level semantic declarations and can be
+// inspected through Model.FunctionRequirements.
+type FunctionCallExpression struct {
+	ref       FunctionRef
+	arguments []Expression
+}
+
+func (c FunctionCallExpression) Ref() FunctionRef { return c.ref }
+func (c FunctionCallExpression) Arguments() []Expression {
+	return append([]Expression(nil), c.arguments...)
+}
+
+// FunctionCall returns typed immutable FunctionCall data.
+func (e Expression) FunctionCall() (FunctionCallExpression, bool) {
+	node, ok := e.value.(ast.FunctionCall)
+	if !ok || !e.IsValid() {
+		return FunctionCallExpression{}, false
+	}
+	arguments := node.Arguments()
+	result := make([]Expression, len(arguments))
+	for index, argument := range arguments {
+		result[index] = expressionFromInternal(argument)
+	}
+	return FunctionCallExpression{ref: functionRefFromInternal(node.Ref()), arguments: result}, true
+}
+
+// CallFunction constructs a first-class extension-function call. Function
+// signature and availability are deliberately model/runtime concerns: model
+// validation resolves ref against the committed FunctionRequirement.
+func CallFunction(ref FunctionRef, args ...Expression) (Expression, error) {
+	internalRef, err := ref.internal()
+	if err != nil {
+		return Expression{}, fmt.Errorf("%w: function ref is invalid", ErrInvalidArgument)
+	}
+	arguments := make([]ast.Expression, len(args))
+	for index, argument := range args {
+		value, argumentErr := requiredExpression(argument, "function argument")
+		if argumentErr != nil {
+			return Expression{}, argumentErr
+		}
+		arguments[index] = value
+	}
+	return expressionFromInternal(ast.NewFunctionCall(internalRef, arguments)), nil
+}
+
 // TraversalDirection selects outgoing, incoming, or both relation directions.
 // Its zero value is invalid.
 type TraversalDirection uint8
@@ -1133,16 +1186,22 @@ const (
 	AggregateMin
 	// AggregateMax selects the maximum mapped value.
 	AggregateMax
+	// AggregateExists reports whether at least one traversal item passes the optional filter.
+	AggregateExists
+	// AggregateAny applies strong three-valued OR to mapped Boolean values.
+	AggregateAny
+	// AggregateAll applies strong three-valued AND to mapped Boolean values.
+	AggregateAll
+	// AggregateDistinctCount counts semantically distinct mapped values.
+	AggregateDistinctCount
 )
 
 // IsValid reports whether o is a supported aggregate operation.
-func (o AggregateOperation) IsValid() bool {
-	return o >= AggregateSum && o <= AggregateMax
-}
+func (o AggregateOperation) IsValid() bool { return o >= AggregateSum && o <= AggregateDistinctCount }
 
 // RequiresMap reports whether o requires a mapped value expression.
 func (o AggregateOperation) RequiresMap() bool {
-	return o == AggregateSum || o == AggregateAverage || o == AggregateMin || o == AggregateMax
+	return o != AggregateCount && o != AggregateExists && o.IsValid()
 }
 
 // String returns the stable aggregate operation name.
@@ -1158,6 +1217,14 @@ func (o AggregateOperation) String() string {
 		return "Min"
 	case AggregateMax:
 		return "Max"
+	case AggregateExists:
+		return "Exists"
+	case AggregateAny:
+		return "Any"
+	case AggregateAll:
+		return "All"
+	case AggregateDistinctCount:
+		return "DistinctCount"
 	default:
 		return "Invalid"
 	}
@@ -1175,6 +1242,14 @@ func (o AggregateOperation) internal() (ast.AggregateOperation, error) {
 		return ast.AggregateOperationMin, nil
 	case AggregateMax:
 		return ast.AggregateOperationMax, nil
+	case AggregateExists:
+		return ast.AggregateOperationExists, nil
+	case AggregateAny:
+		return ast.AggregateOperationAny, nil
+	case AggregateAll:
+		return ast.AggregateOperationAll, nil
+	case AggregateDistinctCount:
+		return ast.AggregateOperationDistinctCount, nil
 	default:
 		return ast.AggregateOperationInvalid, invalidExpressionArgument("aggregate operation is invalid")
 	}
@@ -1192,6 +1267,14 @@ func aggregateOperationFromInternal(operation ast.AggregateOperation) AggregateO
 		return AggregateMin
 	case ast.AggregateOperationMax:
 		return AggregateMax
+	case ast.AggregateOperationExists:
+		return AggregateExists
+	case ast.AggregateOperationAny:
+		return AggregateAny
+	case ast.AggregateOperationAll:
+		return AggregateAll
+	case ast.AggregateOperationDistinctCount:
+		return AggregateDistinctCount
 	default:
 		return 0
 	}
@@ -1216,6 +1299,47 @@ func FilteredCount(source TraversalSource, filter Expression) (Expression, error
 		return Expression{}, err
 	}
 	return expressionFromInternal(ast.NewFilteredCountAggregate(source.value, filterValue)), nil
+}
+
+// Exists reports whether at least one traversal item remains after optional
+// filtering. It does not evaluate a map expression.
+func Exists(source TraversalSource) (Expression, error) {
+	if err := requiredTraversalSource(source); err != nil {
+		return Expression{}, err
+	}
+	return expressionFromInternal(ast.NewCountLikeAggregate(source.value, ast.AggregateOperationExists)), nil
+}
+
+// FilteredExists reports whether an item passes filter. A Null or Undefined
+// filter is indeterminate rather than silently false.
+func FilteredExists(source TraversalSource, filter Expression) (Expression, error) {
+	if err := requiredTraversalSource(source); err != nil {
+		return Expression{}, err
+	}
+	value, err := requiredExpression(filter, "aggregate filter")
+	if err != nil {
+		return Expression{}, err
+	}
+	return expressionFromInternal(ast.NewFilteredCountLikeAggregate(source.value, value, ast.AggregateOperationExists)), nil
+}
+
+func Any(source TraversalSource, mapExpression Expression) (Expression, error) {
+	return Aggregate(source, AggregateAny, mapExpression)
+}
+func FilteredAny(source TraversalSource, filter, mapExpression Expression) (Expression, error) {
+	return FilteredAggregate(source, filter, AggregateAny, mapExpression)
+}
+func All(source TraversalSource, mapExpression Expression) (Expression, error) {
+	return Aggregate(source, AggregateAll, mapExpression)
+}
+func FilteredAll(source TraversalSource, filter, mapExpression Expression) (Expression, error) {
+	return FilteredAggregate(source, filter, AggregateAll, mapExpression)
+}
+func DistinctCount(source TraversalSource, mapExpression Expression) (Expression, error) {
+	return Aggregate(source, AggregateDistinctCount, mapExpression)
+}
+func FilteredDistinctCount(source TraversalSource, filter, mapExpression Expression) (Expression, error) {
+	return FilteredAggregate(source, filter, AggregateDistinctCount, mapExpression)
 }
 
 // Aggregate constructs an unfiltered Sum, Average, Min, or Max aggregate.
@@ -1286,7 +1410,7 @@ func requiredMappedAggregateOperation(operation AggregateOperation) (ast.Aggrega
 		return ast.AggregateOperationInvalid, err
 	}
 	if !value.RequiresMap() {
-		return ast.AggregateOperationInvalid, invalidExpressionArgument("aggregate operation requires Count without a map")
+		return ast.AggregateOperationInvalid, invalidExpressionArgument("aggregate operation does not accept a map")
 	}
 	return value, nil
 }

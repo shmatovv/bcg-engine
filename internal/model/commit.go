@@ -139,5 +139,6 @@ func Commit(
 		draft.constraints,
 		draft.rules,
 		draft.invariants,
+		canonicalFunctionRequirements(draft),
 	), nil
 }

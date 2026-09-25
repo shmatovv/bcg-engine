@@ -11,6 +11,7 @@ import (
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/schema"
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/scope"
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/semantic"
+	"github.com/shmatovv/bcg-engine/v2/internal/function"
 )
 
 type indexes struct {
@@ -57,6 +58,7 @@ type indexes struct {
 	entityTypesByTrait map[identity.UUID][]schema.EntityType
 
 	contractImplementationByOwner map[schema.PropertyOwner]map[identity.UUID]schema.PropertyDefinition
+	functionRequirementByRef      map[string]function.Requirement
 }
 
 type relationTraversalKey struct {
@@ -79,6 +81,7 @@ func buildIndexes(
 	rules []rule.Rule,
 	invariants []invariant.Invariant,
 	valueBindings []semantic.ValueBinding,
+	functionRequirements []function.Requirement,
 ) indexes {
 	result := indexes{
 		valueBindingsByTarget: make(map[semantic.ValueTarget][]semantic.ValueBinding),
@@ -168,6 +171,7 @@ func buildIndexes(
 		contractImplementationByOwner: make(
 			map[schema.PropertyOwner]map[identity.UUID]schema.PropertyDefinition,
 		),
+		functionRequirementByRef: make(map[string]function.Requirement, len(functionRequirements)),
 	}
 
 	for _, entityType := range entityTypes {
@@ -230,6 +234,11 @@ func buildIndexes(
 
 		implementations[contractID] =
 			definition
+	}
+	for _, requirement := range functionRequirements {
+		if requirement.IsValid() {
+			result.functionRequirementByRef[requirement.Ref().Key()] = requirement
+		}
 	}
 
 	for _, definition := range scopeDefinitions {

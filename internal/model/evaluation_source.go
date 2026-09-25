@@ -7,11 +7,13 @@ import (
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/address"
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/constraint"
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/identity"
+	"github.com/shmatovv/bcg-engine/v2/internal/domain/invariant"
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/rule"
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/schema"
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/scope"
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/semantic"
 	"github.com/shmatovv/bcg-engine/v2/internal/expression/typing"
+	"github.com/shmatovv/bcg-engine/v2/internal/function"
 	"github.com/shmatovv/bcg-engine/v2/internal/graph/dependency"
 	"github.com/shmatovv/bcg-engine/v2/internal/types/precision"
 )
@@ -147,12 +149,19 @@ func (s EvaluationSource) ContractImplementation(owner schema.PropertyOwner, con
 func (s EvaluationSource) ContractType(constraint schema.TypeConstraint, contractID identity.UUID) (typing.Type, bool) {
 	return s.version.ContractType(constraint, contractID)
 }
+func (s EvaluationSource) FunctionRequirement(ref function.Ref) (function.Requirement, bool) {
+	return s.version.FunctionRequirement(ref)
+}
 func (s EvaluationSource) Constraints() []constraint.Constraint { return s.version.Constraints() }
 func (s EvaluationSource) Constraint(id identity.UUID) (constraint.Constraint, bool) {
 	return s.version.Constraint(id)
 }
 func (s EvaluationSource) Rules() []rule.Rule                      { return s.version.Rules() }
 func (s EvaluationSource) Rule(id identity.UUID) (rule.Rule, bool) { return s.version.Rule(id) }
+func (s EvaluationSource) Invariants() []invariant.Invariant       { return s.version.Invariants() }
+func (s EvaluationSource) Invariant(id identity.UUID) (invariant.Invariant, bool) {
+	return s.version.Invariant(id)
+}
 func (s EvaluationSource) ObjectType(object address.ObjectRef) (schema.PropertyOwner, bool) {
 	switch object.Kind() {
 	case address.ObjectRefEntity:

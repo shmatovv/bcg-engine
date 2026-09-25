@@ -8,6 +8,7 @@ import (
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/schema"
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/scope"
 	"github.com/shmatovv/bcg-engine/v2/internal/domain/semantic"
+	"github.com/shmatovv/bcg-engine/v2/internal/function"
 	"github.com/shmatovv/bcg-engine/v2/internal/types/precision"
 )
 
@@ -38,8 +39,9 @@ type ModelVersion struct {
 
 	constraints []constraint.Constraint
 
-	rules      []rule.Rule
-	invariants []invariant.Invariant
+	rules                []rule.Rule
+	invariants           []invariant.Invariant
+	functionRequirements []function.Requirement
 
 	indexes indexes
 }
@@ -65,6 +67,7 @@ func newCommittedModelVersion(
 	constraints []constraint.Constraint,
 	rules []rule.Rule,
 	invariants []invariant.Invariant,
+	functionRequirements []function.Requirement,
 ) ModelVersion {
 	if id.IsZero() {
 		panic("model: committed model version id must not be zero")
@@ -111,6 +114,7 @@ func newCommittedModelVersion(
 		constraints,
 		rules,
 		invariants,
+		functionRequirements,
 	)
 }
 
@@ -146,6 +150,7 @@ func newModelVersion(
 		nil,
 		nil,
 		nil,
+		nil,
 	)
 }
 
@@ -170,6 +175,7 @@ func newModelVersionSnapshot(
 	constraints []constraint.Constraint,
 	rules []rule.Rule,
 	invariants []invariant.Invariant,
+	functionRequirements []function.Requirement,
 ) ModelVersion {
 	entityTypes = cloneSlice(entityTypes)
 	enumDefinitions = cloneSlice(enumDefinitions)
@@ -185,6 +191,7 @@ func newModelVersionSnapshot(
 	constraints = cloneSlice(constraints)
 	rules = cloneSlice(rules)
 	invariants = cloneSlice(invariants)
+	functionRequirements = cloneSlice(functionRequirements)
 
 	result := ModelVersion{
 		id:              id,
@@ -208,6 +215,7 @@ func newModelVersionSnapshot(
 		constraints:          constraints,
 		rules:                rules,
 		invariants:           invariants,
+		functionRequirements: functionRequirements,
 
 		indexes: buildIndexes(
 			entityTypes,
@@ -224,6 +232,7 @@ func newModelVersionSnapshot(
 			rules,
 			invariants,
 			valueBindings,
+			functionRequirements,
 		),
 	}
 
@@ -379,6 +388,13 @@ func (v ModelVersion) Rules() []rule.Rule {
 	return cloneSlice(v.rules)
 }
 func (v ModelVersion) Invariants() []invariant.Invariant { return cloneSlice(v.invariants) }
+func (v ModelVersion) FunctionRequirements() []function.Requirement {
+	return cloneSlice(v.functionRequirements)
+}
+func (v ModelVersion) FunctionRequirement(ref function.Ref) (function.Requirement, bool) {
+	value, ok := v.indexes.functionRequirementByRef[ref.Key()]
+	return value, ok
+}
 
 func (v ModelVersion) EntityType(
 	id identity.UUID,

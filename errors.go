@@ -36,6 +36,13 @@ var (
 	// ErrInvalidModel identifies an invalid public Model or Artifact wrapper.
 	ErrInvalidModel        = errors.New("bcg: invalid model")
 	ErrIncompatibleRuntime = errors.New("bcg: incompatible runtime")
+	// ErrFunctionExecution identifies a host extension callback error.
+	ErrFunctionExecution = errors.New("bcg: function execution failed")
+	// ErrFunctionPanic identifies a recovered extension callback panic.
+	ErrFunctionPanic = errors.New("bcg: function panicked")
+	// ErrFunctionResultContract identifies a callback output that violates the
+	// model-declared FunctionSignature.
+	ErrFunctionResultContract = errors.New("bcg: function result contract violation")
 )
 
 // ValidationIssue is one machine-readable model validation problem.

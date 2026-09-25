@@ -2,11 +2,13 @@ package datetime
 
 import (
 	"fmt"
+	"math/big"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/shmatovv/bcg-engine/v2/internal/types/date"
+	"github.com/shmatovv/bcg-engine/v2/internal/types/duration"
 )
 
 const (
@@ -417,6 +419,55 @@ func (dt DateTime) Cmp(other DateTime) int {
 	default:
 		return 0
 	}
+}
+
+// Add adds an exact elapsed Duration to dt. Calendar arithmetic is performed
+// in UTC only; no local location, time-zone database, or wall clock is used.
+// A result outside the DateTime representable range is rejected.
+func (dt DateTime) Add(delta duration.Duration) (DateTime, error) {
+	if !dt.IsValid() {
+		return DateTime{}, fmt.Errorf("datetime: add requires a valid datetime")
+	}
+	value := dateTimeNanoseconds(dt)
+	value.Add(value, delta.Nanoseconds())
+	dayNanos := big.NewInt(86_400_000_000_000)
+	days, remainder := new(big.Int), new(big.Int)
+	days.QuoRem(value, dayNanos, remainder)
+	if remainder.Sign() < 0 {
+		days.Sub(days, big.NewInt(1))
+		remainder.Add(remainder, dayNanos)
+	}
+	minDay, maxDay := supportedDayRange()
+	if days.Cmp(big.NewInt(minDay)) < 0 || days.Cmp(big.NewInt(maxDay)) > 0 {
+		return DateTime{}, fmt.Errorf("datetime: duration result is outside supported date range")
+	}
+	day := days.Int64()
+	utc := time.Unix(day*86_400, 0).UTC()
+	nanos := remainder.Int64()
+	return newDateTime(date.New(utc.Year(), int(utc.Month()), utc.Day()), int(nanos/3_600_000_000_000), int((nanos/60_000_000_000)%60), int((nanos/1_000_000_000)%60), int(nanos%1_000_000_000))
+}
+
+// Sub subtracts an exact elapsed Duration from dt.
+func (dt DateTime) Sub(delta duration.Duration) (DateTime, error) { return dt.Add(delta.Neg()) }
+
+// Difference returns dt-other as an exact arbitrary-size Duration.
+func (dt DateTime) Difference(other DateTime) (duration.Duration, error) {
+	if !dt.IsValid() || !other.IsValid() {
+		return duration.Duration{}, fmt.Errorf("datetime: difference requires valid datetimes")
+	}
+	return duration.FromNanoseconds(new(big.Int).Sub(dateTimeNanoseconds(dt), dateTimeNanoseconds(other))), nil
+}
+
+func supportedDayRange() (int64, int64) {
+	return time.Date(1, time.January, 1, 0, 0, 0, 0, time.UTC).Unix() / 86_400,
+		time.Date(9999, time.December, 31, 0, 0, 0, 0, time.UTC).Unix() / 86_400
+}
+
+func dateTimeNanoseconds(dt DateTime) *big.Int {
+	day := time.Date(dt.date.Year(), time.Month(dt.date.Month()), dt.date.Day(), 0, 0, 0, 0, time.UTC).Unix() / 86_400
+	result := new(big.Int).Mul(big.NewInt(day), big.NewInt(86_400_000_000_000))
+	timeOfDay := int64(dt.hour)*3_600_000_000_000 + int64(dt.minute)*60_000_000_000 + int64(dt.second)*1_000_000_000 + int64(dt.nanosecond)
+	return result.Add(result, big.NewInt(timeOfDay))
 }
 
 // String returns the canonical UTC representation of dt.

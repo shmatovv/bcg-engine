@@ -443,6 +443,17 @@ func (e expressionExtractor) walk(
 		}
 		return nil
 
+	case ast.FunctionCall:
+		if !expression.IsValid() {
+			return invalidExpressionError()
+		}
+		for _, child := range expression.Arguments() {
+			if err := e.walk(child, context, dependencies); err != nil {
+				return err
+			}
+		}
+		return nil
+
 	default:
 		return newBuildError(
 			BuildErrorInvalidExpression,

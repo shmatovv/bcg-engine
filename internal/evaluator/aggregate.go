@@ -231,7 +231,7 @@ func (s *evaluationState) evaluateAggregate(
 			}
 		}
 
-		if expression.Operation() == ast.AggregateOperationCount {
+		if expression.Operation() == ast.AggregateOperationCount || expression.Operation() == ast.AggregateOperationExists {
 			count++
 			provenanceChildren = append(provenanceChildren,
 				aggregateItemProvenance(item, itemProvenance, boolResolved(true)),
@@ -265,11 +265,14 @@ func (s *evaluationState) evaluateAggregate(
 			).WithResolved(mapResult.value),
 		)
 
-		if mapResult.value.IsNull() ||
-			mapResult.value.IsUndefined() {
+		if mapResult.value.IsNull() || mapResult.value.IsUndefined() {
 			provenanceChildren = append(provenanceChildren,
 				aggregateItemProvenance(item, itemProvenance, mapResult.value),
 			)
+			if expression.Operation() == ast.AggregateOperationAny || expression.Operation() == ast.AggregateOperationAll {
+				mapped = append(mapped, mapResult.value)
+				continue
+			}
 			return newResult(
 				mapResult.value,
 				provenance.NewOperation(
@@ -496,6 +499,9 @@ func (s *evaluationState) finishAggregate(
 			),
 		), nil
 
+	case ast.AggregateOperationExists:
+		return boolResolved(count > 0), nil
+
 	case ast.AggregateOperationSum:
 		if len(mapped) == 0 {
 			return zeroResolvedForStaticType(staticType)
@@ -601,6 +607,29 @@ func (s *evaluationState) finishAggregate(
 			staticType,
 		)
 
+	case ast.AggregateOperationDistinctCount:
+		distinct := make([]enginevalue.Typed, 0, len(mapped))
+		for _, candidate := range mapped {
+			if !candidate.IsDefined() {
+				return enginevalue.Resolved{}, newError(ErrorInvariantViolation, "DistinctCount received a non-defined mapped value", nil)
+			}
+			value := candidate.Value()
+			seen := false
+			for _, existing := range distinct {
+				if value.Equal(existing) {
+					seen = true
+					break
+				}
+			}
+			if !seen {
+				distinct = append(distinct, value)
+			}
+		}
+		return enginevalue.Defined(enginevalue.NewTyped(enginevalue.NewInt64(int64(len(distinct))))), nil
+
+	case ast.AggregateOperationAny, ast.AggregateOperationAll:
+		return quantifyAggregate(operation, mapped)
+
 	default:
 		return enginevalue.Resolved{},
 			newError(
@@ -609,6 +638,44 @@ func (s *evaluationState) finishAggregate(
 				nil,
 			)
 	}
+}
+
+// quantifyAggregate uses strong, order-independent three-state logic. A
+// conclusive true for Any or false for All dominates an indeterminate item;
+// otherwise Undefined dominates Null, which dominates the non-conclusive
+// Boolean identity. Filters remain source-membership predicates and are
+// handled earlier as indeterminate conditions.
+func quantifyAggregate(operation ast.AggregateOperation, mapped []enginevalue.Resolved) (enginevalue.Resolved, error) {
+	hasNull, hasUndefined := false, false
+	identity := operation == ast.AggregateOperationAll
+	for _, item := range mapped {
+		if item.IsUndefined() {
+			hasUndefined = true
+			continue
+		}
+		if item.IsNull() {
+			hasNull = true
+			continue
+		}
+		value := item.Value()
+		if value.Type() != enginevalue.Bool || value.HasUnit() {
+			return enginevalue.Resolved{}, newError(ErrorInvariantViolation, "validated quantified aggregate map is not a unitless Bool", nil)
+		}
+		truth := value.Raw().Bool()
+		if operation == ast.AggregateOperationAny && truth {
+			return boolResolved(true), nil
+		}
+		if operation == ast.AggregateOperationAll && !truth {
+			return boolResolved(false), nil
+		}
+	}
+	if hasUndefined {
+		return dependencyUndefined(), nil
+	}
+	if hasNull {
+		return enginevalue.Null(), nil
+	}
+	return boolResolved(identity), nil
 }
 
 func (s *evaluationState) aggregateTraversalItems(
